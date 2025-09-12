@@ -103,6 +103,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
 
     actions.updateAtivo(ativoAtualizado);
     alert('Cotação atualizada com sucesso!');
+    onClose(); // Fecha o modal após atualizar a cotação
   };
 
   if (!isOpen || !ativo) return null;
