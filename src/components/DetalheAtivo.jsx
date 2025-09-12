@@ -5,7 +5,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
-  const { actions } = useInvestment();
+  const { actions, state } = useInvestment();
   const [ativoLocal, setAtivoLocal] = useState(ativoProp);
   const [activeTab, setActiveTab] = useState('resumo');
   const [formOperacao, setFormOperacao] = useState({
@@ -27,6 +27,17 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     // Ao abrir o modal, garantir que a aba ativa seja 'resumo'
     setActiveTab('resumo');
   }, [ativoProp]);
+
+  // Atualizar o ativo local quando mudar de aba ou quando o estado global for atualizado
+  useEffect(() => {
+    if (ativoLocal && state.ativos) {
+      // Buscar dados atualizados do ativo
+      const ativoAtualizado = state.ativos.find(a => a.codigo === ativoLocal.codigo);
+      if (ativoAtualizado && JSON.stringify(ativoAtualizado) !== JSON.stringify(ativoLocal)) {
+        setAtivoLocal(ativoAtualizado);
+      }
+    }
+  }, [activeTab, state.ativos, ativoLocal?.codigo]);
 
   // Função para lidar com o fechamento do modal
   const handleClose = () => {
@@ -55,8 +66,14 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const operacoesAgrupadas = useMemo(() => {
     if (!ativoLocal || !ativoLocal.operacoes) return [];
 
+    // Fazer uma cópia profunda para evitar problemas de referência
+    const operacoesClone = JSON.parse(JSON.stringify(ativoLocal.operacoes));
+
     // Ordenar operações por data (mais recentes primeiro)
-    const operacoesOrdenadas = [...ativoLocal.operacoes].sort((a, b) => {
+    const operacoesOrdenadas = operacoesClone.map((op, index) => ({
+      ...op,
+      originalIndex: index // Armazenar o índice original
+    })).sort((a, b) => {
       // Criar datas no formato YYYY-MM-DD para evitar problemas de fuso horário
       const dataA = a.data.split('T')[0];
       const dataB = b.data.split('T')[0];
@@ -65,7 +82,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
 
     // Agrupar por data
     const grupos = {};
-    operacoesOrdenadas.forEach((op, index) => {
+    operacoesOrdenadas.forEach((op) => {
       // Normalizar a data para evitar problemas de fuso horário
       // Extrair apenas a parte da data (YYYY-MM-DD) e então formatar
       const dataPura = op.data.split('T')[0];
@@ -75,7 +92,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       if (!grupos[dataFormatada]) {
         grupos[dataFormatada] = [];
       }
-      grupos[dataFormatada].push({...op, index});
+      grupos[dataFormatada].push(op);
     });
 
     // Converter para array
@@ -83,7 +100,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       data,
       operacoes: grupos[data]
     }));
-  }, [ativoLocal, ativoLocal?.operacoes]);
+  }, [ativoLocal, JSON.stringify(ativoLocal?.operacoes)]);
 
   // Formatadores
   const formatCurrency = (value) => {
@@ -181,37 +198,92 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       corretagem: parseFloat(formOperacao.corretagem) || 0
     };
 
+    // Desativar a atualização automática do ativoLocal temporariamente
+    // para evitar a piscada causada pela atualização dupla
+    let novoAtivoLocal;
+    
     if (editingOperacaoIndex !== null) {
       // Modo de edição
+      // 1. Atualizar o estado global primeiro
       actions.updateOperacao(ativoLocal.codigo, editingOperacaoIndex, novaOperacao);
       
-      // Atualizar localmente para feedback imediato
-      const ativoAtualizado = {...ativoLocal};
-      ativoAtualizado.operacoes[editingOperacaoIndex] = novaOperacao;
-      setAtivoLocal(ativoAtualizado);
+      // 2. Criar uma cópia profunda do ativo para atualização local
+      novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
+      novoAtivoLocal.operacoes[editingOperacaoIndex] = novaOperacao;
+      
+      // Recalcular os valores localmente para refletir a atualização imediatamente
+      const novaQuantidade = novoAtivoLocal.operacoes.reduce((total, op) => {
+        return op.tipo === 'COMPRA' ? total + op.quantidade : total - op.quantidade;
+      }, 0);
+      
+      const compras = novoAtivoLocal.operacoes.filter(op => op.tipo === 'COMPRA');
+      const totalValorCompras = compras.reduce((sum, op) => sum + op.valor, 0);
+      const totalQuantidadeCompras = compras.reduce((sum, op) => sum + op.quantidade, 0);
+      const novoPrecoMedio = totalQuantidadeCompras > 0 ? totalValorCompras / totalQuantidadeCompras : 0;
+      
+      const novoValorInvestido = compras.reduce((sum, op) => sum + op.valor + (op.corretagem || 0), 0);
+      const novoValorAtual = novaQuantidade * novoAtivoLocal.cotacaoAtual;
+      const novaRentabilidade = novoValorInvestido > 0 ? 
+        ((novoValorAtual - novoValorInvestido) / novoValorInvestido) * 100 : 0;
+      
+      novoAtivoLocal.quantidade = novaQuantidade;
+      novoAtivoLocal.precoMedio = novoPrecoMedio;
+      novoAtivoLocal.valorInvestido = novoValorInvestido;
+      novoAtivoLocal.valorAtual = novoValorAtual;
+      novoAtivoLocal.rentabilidade = novaRentabilidade;
+      
+      // 3. Atualizar o estado local com os cálculos completos
+      setAtivoLocal(novoAtivoLocal);
       
       alert('Operação atualizada com sucesso!');
     } else {
       // Modo de adição
+      // 1. Atualizar o estado global primeiro
       actions.addOperacao(ativoLocal.codigo, novaOperacao);
       
-      // Atualizar localmente para feedback imediato
-      const ativoAtualizado = {...ativoLocal};
-      ativoAtualizado.operacoes = [...ativoAtualizado.operacoes, novaOperacao];
-      setAtivoLocal(ativoAtualizado);
+      // 2. Criar uma cópia profunda do ativo para atualização local
+      novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
+      novoAtivoLocal.operacoes.push(novaOperacao);
+      
+      // Recalcular os valores localmente para refletir a atualização imediatamente
+      const novaQuantidade = novoAtivoLocal.operacoes.reduce((total, op) => {
+        return op.tipo === 'COMPRA' ? total + op.quantidade : total - op.quantidade;
+      }, 0);
+      
+      const compras = novoAtivoLocal.operacoes.filter(op => op.tipo === 'COMPRA');
+      const totalValorCompras = compras.reduce((sum, op) => sum + op.valor, 0);
+      const totalQuantidadeCompras = compras.reduce((sum, op) => sum + op.quantidade, 0);
+      const novoPrecoMedio = totalQuantidadeCompras > 0 ? totalValorCompras / totalQuantidadeCompras : 0;
+      
+      const novoValorInvestido = compras.reduce((sum, op) => sum + op.valor + (op.corretagem || 0), 0);
+      const novoValorAtual = novaQuantidade * novoAtivoLocal.cotacaoAtual;
+      const novaRentabilidade = novoValorInvestido > 0 ? 
+        ((novoValorAtual - novoValorInvestido) / novoValorInvestido) * 100 : 0;
+      
+      novoAtivoLocal.quantidade = novaQuantidade;
+      novoAtivoLocal.precoMedio = novoPrecoMedio;
+      novoAtivoLocal.valorInvestido = novoValorInvestido;
+      novoAtivoLocal.valorAtual = novoValorAtual;
+      novoAtivoLocal.rentabilidade = novaRentabilidade;
+      
+      // 3. Atualizar o estado local com os cálculos completos
+      setAtivoLocal(novoAtivoLocal);
       
       alert('Operação adicionada com sucesso!');
     }
     
-    // Reset form
+    // Reset form e interface
     resetOperacaoForm();
-    
     setEditingOperacaoIndex(null);
     setShowAddOperacao(false);
   };
 
   const handleEditOperacao = (operacaoIndex) => {
     const operacao = ativoLocal.operacoes[operacaoIndex];
+    if (!operacao) {
+      console.error(`Operação com índice ${operacaoIndex} não encontrada`);
+      return;
+    }
     
     // Garantir que a data esteja no formato YYYY-MM-DD para o input date
     // Para evitar problemas de fuso horário, normalizamos a data
@@ -249,20 +321,22 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   };
 
   const handleRemoveOperacao = (operacaoIndex) => {
-    if (window.confirm('Tem certeza que deseja remover esta operação? Esta ação afetará todos os cálculos do ativoLocal.')) {
-      actions.removeOperacao(ativoLocal.codigo, operacaoIndex);
+    if (window.confirm('Tem certeza que deseja remover esta operação? Esta ação afetará todos os cálculos do ativo.')) {
+      const codigoAtivo = ativoLocal.codigo;
+      actions.removeOperacao(codigoAtivo, operacaoIndex);
       
-      // Atualizar localmente para feedback imediato
-      const ativoAtualizado = {...ativoLocal};
-      ativoAtualizado.operacoes = ativoAtualizado.operacoes.filter((_, i) => i !== operacaoIndex);
-      setAtivoLocal(ativoAtualizado);
+      // Atualizar o estado local com os dados mais recentes do estado global
+      setTimeout(() => {
+        const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
+        if (ativoAtualizado) {
+          setAtivoLocal(ativoAtualizado);
+        } else {
+          // Se o ativo foi removido (não existe mais no estado global), fechar o modal
+          handleClose();
+        }
+      }, 10);
       
       alert('Operação removida com sucesso!');
-      
-      // Se era a última operação, o ativo foi removido, então feche o modal
-      if (ativoLocal.operacoes.length === 1) {
-        handleClose();
-      }
     }
   };
 
@@ -681,7 +755,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {grupo.operacoes.map((op) => (
-                              <tr key={op.index} className="hover:bg-gray-50">
+                              <tr key={op.originalIndex} className="hover:bg-gray-50">
                                 <td className="table-cell">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                     op.tipo === 'COMPRA' 
@@ -699,14 +773,14 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
                                 <td className="table-cell">
                                   <div className="flex space-x-2">
                                     <button
-                                      onClick={() => handleEditOperacao(op.index)}
+                                      onClick={() => handleEditOperacao(op.originalIndex)}
                                       className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
                                       title="Editar operação"
                                     >
                                       <Edit className="h-4 w-4" />
                                     </button>
                                     <button
-                                      onClick={() => handleRemoveOperacao(op.index)}
+                                      onClick={() => handleRemoveOperacao(op.originalIndex)}
                                       className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full transition-colors"
                                       title="Remover operação"
                                     >
