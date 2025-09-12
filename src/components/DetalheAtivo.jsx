@@ -24,7 +24,23 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   // Atualizar o ativo local quando o ativo prop mudar
   useEffect(() => {
     setAtivoLocal(ativoProp);
+    // Ao abrir o modal, garantir que a aba ativa seja 'resumo'
+    setActiveTab('resumo');
   }, [ativoProp]);
+
+  // Função para lidar com o fechamento do modal
+  const handleClose = () => {
+    // Resetar o formulário de operação
+    resetOperacaoForm();
+    // Ocultar o formulário de adição de operação
+    setShowAddOperacao(false);
+    // Limpar o índice de operação em edição
+    setEditingOperacaoIndex(null);
+    // Resetar para a aba resumo
+    setActiveTab('resumo');
+    // Chamar a função de fechamento original
+    onClose();
+  };
 
   // Atualizar o formulário de cotação quando o ativo mudar
   useEffect(() => {
@@ -245,7 +261,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       
       // Se era a última operação, o ativo foi removido, então feche o modal
       if (ativoLocal.operacoes.length === 1) {
-        onClose();
+        handleClose();
       }
     }
   };
@@ -283,7 +299,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     actions.updateAtivo(ativoAtualizado);
     setAtivoLocal(ativoAtualizado);
     alert('Cotação atualizada com sucesso!');
-    onClose(); // Fecha o modal após atualizar a cotação
+    handleClose(); // Fecha o modal após atualizar a cotação
   };
 
   if (!isOpen || !ativoLocal) return null;
@@ -309,7 +325,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
             </p>
           </div>
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X className="h-5 w-5" />
