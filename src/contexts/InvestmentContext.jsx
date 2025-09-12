@@ -85,6 +85,8 @@ const actionTypes = {
   UPDATE_ATIVO: 'UPDATE_ATIVO',
   REMOVE_ATIVO: 'REMOVE_ATIVO',
   ADD_OPERACAO: 'ADD_OPERACAO',
+  UPDATE_OPERACAO: 'UPDATE_OPERACAO',
+  REMOVE_OPERACAO: 'REMOVE_OPERACAO',
   ADD_PROVENTO: 'ADD_PROVENTO',
   UPDATE_CONFIGURACOES: 'UPDATE_CONFIGURACOES',
   LOAD_DATA: 'LOAD_DATA',
@@ -166,6 +168,73 @@ const investmentReducer = (state, action) => {
       return { ...state, ativos: novosAtivos };
     }
 
+    case actionTypes.UPDATE_OPERACAO: {
+      const { codigo, index, operacao } = action.payload;
+      const novosAtivos = state.ativos.map(ativo => {
+        if (ativo.codigo === codigo) {
+          const novasOperacoes = [...ativo.operacoes];
+          novasOperacoes[index] = operacao;
+          
+          const novaQuantidade = calcularQuantidadeTotal(novasOperacoes);
+          const novoPrecoMedio = calcularPrecoMedio(novasOperacoes);
+          const novoValorInvestido = calcularValorInvestido(novasOperacoes);
+          const novoValorAtual = novaQuantidade * ativo.cotacaoAtual;
+          const novaRentabilidade = novoValorInvestido > 0 ? 
+            ((novoValorAtual - novoValorInvestido) / novoValorInvestido) * 100 : 0;
+
+          return {
+            ...ativo,
+            operacoes: novasOperacoes,
+            quantidade: novaQuantidade,
+            precoMedio: novoPrecoMedio,
+            valorInvestido: novoValorInvestido,
+            valorAtual: novoValorAtual,
+            rentabilidade: novaRentabilidade
+          };
+        }
+        return ativo;
+      });
+
+      return { ...state, ativos: novosAtivos };
+    }
+
+    case actionTypes.REMOVE_OPERACAO: {
+      const { codigo, index } = action.payload;
+      const novosAtivos = state.ativos.map(ativo => {
+        if (ativo.codigo === codigo) {
+          const novasOperacoes = ativo.operacoes.filter((_, i) => i !== index);
+          
+          // Se não sobrar nenhuma operação, remove o ativo inteiro
+          if (novasOperacoes.length === 0) {
+            return null;
+          }
+          
+          const novaQuantidade = calcularQuantidadeTotal(novasOperacoes);
+          const novoPrecoMedio = calcularPrecoMedio(novasOperacoes);
+          const novoValorInvestido = calcularValorInvestido(novasOperacoes);
+          const novoValorAtual = novaQuantidade * ativo.cotacaoAtual;
+          const novaRentabilidade = novoValorInvestido > 0 ? 
+            ((novoValorAtual - novoValorInvestido) / novoValorInvestido) * 100 : 0;
+
+          return {
+            ...ativo,
+            operacoes: novasOperacoes,
+            quantidade: novaQuantidade,
+            precoMedio: novoPrecoMedio,
+            valorInvestido: novoValorInvestido,
+            valorAtual: novoValorAtual,
+            rentabilidade: novaRentabilidade
+          };
+        }
+        return ativo;
+      });
+
+      // Filtra qualquer ativo que tenha retornado null (sem operações)
+      const ativosRestantes = novosAtivos.filter(ativo => ativo !== null);
+      
+      return { ...state, ativos: ativosRestantes };
+    }
+
     case actionTypes.ADD_PROVENTO: {
       const { codigo, provento } = action.payload;
       const novosAtivos = state.ativos.map(ativo => {
@@ -241,6 +310,14 @@ export const InvestmentProvider = ({ children }) => {
     dispatch({ type: actionTypes.ADD_OPERACAO, payload: { codigo, operacao } });
   };
 
+  const updateOperacao = (codigo, index, operacao) => {
+    dispatch({ type: actionTypes.UPDATE_OPERACAO, payload: { codigo, index, operacao } });
+  };
+
+  const removeOperacao = (codigo, index) => {
+    dispatch({ type: actionTypes.REMOVE_OPERACAO, payload: { codigo, index } });
+  };
+
   const addProvento = (codigo, provento) => {
     dispatch({ type: actionTypes.ADD_PROVENTO, payload: { codigo, provento } });
   };
@@ -289,6 +366,8 @@ export const InvestmentProvider = ({ children }) => {
       updateAtivo,
       removeAtivo,
       addOperacao,
+      updateOperacao,
+      removeOperacao,
       addProvento,
       updateConfiguracoes
     },
