@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
-import { DollarSign, Plus, Calendar, TrendingUp, Building } from 'lucide-react';
+import { DollarSign, Plus, Calendar, TrendingUp, Building, Edit, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const ProventosComponent = () => {
   const { state, actions } = useInvestment();
   const [isOpen, setIsOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingInfo, setEditingInfo] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(Date.now()); // Estado para controlar atualizações
+  const isMounted = useRef(true); // Referência para verificar se o componente está montado
   const [formData, setFormData] = useState({
     codigo: '',
     valor: '',
@@ -37,6 +41,47 @@ const ProventosComponent = () => {
 
   const totalProventos = todosProventos.reduce((sum, provento) => sum + provento.valor, 0);
 
+  // Agrupar proventos por data
+  const proventosAgrupados = useMemo(() => {
+    // Fazer uma cópia dos proventos
+    const proventosClone = JSON.parse(JSON.stringify(todosProventos));
+
+    // Adicionar índice original a cada provento para rastreabilidade
+    const proventosComIndice = proventosClone.map((prov, index) => ({
+      ...prov,
+      listIndex: index // Índice na lista completa para operações de edição/exclusão
+    }));
+
+    // Ordenar proventos por data (mais recentes primeiro)
+    const proventosOrdenados = proventosComIndice.sort((a, b) => {
+      // Criar datas no formato YYYY-MM-DD para evitar problemas de fuso horário
+      const dataA = a.data.split('T')[0];
+      const dataB = b.data.split('T')[0];
+      return new Date(dataB) - new Date(dataA);
+    });
+
+    // Agrupar por data
+    const grupos = {};
+    proventosOrdenados.forEach((prov) => {
+      // Normalizar a data para evitar problemas de fuso horário
+      // Extrair apenas a parte da data (YYYY-MM-DD) e então formatar
+      const dataPura = prov.data.split('T')[0];
+      const [ano, mes, dia] = dataPura.split('-');
+      const dataFormatada = `${dia}/${mes}/${ano}`;
+      
+      if (!grupos[dataFormatada]) {
+        grupos[dataFormatada] = [];
+      }
+      grupos[dataFormatada].push(prov);
+    });
+
+    // Converter para array
+    return Object.keys(grupos).map(data => ({
+      data,
+      proventos: grupos[data]
+    }));
+  }, [todosProventos, lastUpdate]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     
@@ -45,30 +90,147 @@ const ProventosComponent = () => {
       return;
     }
 
-    const ativoExiste = state.ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
+    // Normalizar a data para o formato YYYY-MM-DD sem componente de tempo
+    const dataInput = formData.data;
+    let dataFormatada;
     
-    if (!ativoExiste) {
-      alert('Ativo não encontrado na carteira.');
-      return;
+    if (dataInput.includes('-')) {
+      // Se já está no formato YYYY-MM-DD ou YYYY-MM-DDT...
+      dataFormatada = dataInput.split('T')[0]; // Remover a parte do tempo se existir
+    } else if (dataInput.includes('/')) {
+      // Se está no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataInput.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter
+      try {
+        const dateObj = new Date(dataInput);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o input original se houver erro
+        dataFormatada = dataInput;
+      }
     }
 
     const provento = {
-      data: formData.data,
+      data: dataFormatada,
       valor: parseFloat(formData.valor),
       tipo: formData.tipo
     };
 
-    actions.addProvento(formData.codigo.toUpperCase(), provento);
+    if (isEditing && editingInfo) {
+      // Modo de edição
+      actions.updateProvento(editingInfo.codigoAtivo, editingInfo.proventoIndex, provento);
+      alert('Provento atualizado com sucesso!');
+    } else {
+      // Modo de adição
+      const ativoExiste = state.ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
+      
+      if (!ativoExiste) {
+        alert('Ativo não encontrado na carteira.');
+        return;
+      }
+
+      actions.addProvento(formData.codigo.toUpperCase(), provento);
+      alert('Provento registrado com sucesso!');
+    }
     
+    // Reset form e interface
+    resetForm();
+    setIsOpen(false);
+    setLastUpdate(Date.now()); // Forçar atualização da interface
+  };
+
+  const resetForm = () => {
     setFormData({
       codigo: '',
       valor: '',
       tipo: 'DIVIDENDO',
       data: format(new Date(), 'yyyy-MM-dd')
     });
+    setIsEditing(false);
+    setEditingInfo(null);
+  };
+
+  const handleEditProvento = (provento) => {
+    // Garantir que a data esteja no formato YYYY-MM-DD para o input date
+    const dataOriginal = provento.data;
+    let dataFormatada;
     
-    setIsOpen(false);
-    alert('Provento registrado com sucesso!');
+    // Normalizar para formato YYYY-MM-DD sem componente de tempo
+    if (dataOriginal.includes('-')) {
+      // Remover qualquer componente de tempo se existir
+      dataFormatada = dataOriginal.split('T')[0];
+    } else if (dataOriginal.includes('/')) {
+      // Se estiver no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataOriginal.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter manualmente para evitar problemas de fuso horário
+      try {
+        const dateObj = new Date(dataOriginal);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o formato original se houver erro
+        dataFormatada = dataOriginal;
+      }
+    }
+    
+    setFormData({
+      codigo: provento.codigo,
+      tipo: provento.tipo,
+      valor: provento.valor.toString(),
+      data: dataFormatada
+    });
+    
+    // Encontrar o ativo e o índice do provento para edição
+    const ativo = state.ativos.find(a => a.codigo === provento.codigo);
+    if (ativo) {
+      // Procurar o provento no array de proventos do ativo que corresponde ao provento a ser editado
+      const proventoIndex = ativo.proventos.findIndex(p => 
+        p.data === provento.data && 
+        p.valor === provento.valor && 
+        p.tipo === provento.tipo
+      );
+      
+      if (proventoIndex !== -1) {
+        setEditingInfo({
+          codigoAtivo: provento.codigo,
+          proventoIndex: proventoIndex
+        });
+        
+        setIsEditing(true);
+        setIsOpen(true);
+      }
+    }
+  };
+
+  const handleRemoveProvento = (provento) => {
+    if (window.confirm(`Tem certeza que deseja remover este provento de ${provento.codigo}? Esta ação afetará todos os cálculos do ativo.`)) {
+      // Encontrar o ativo e o índice do provento para remoção
+      const ativo = state.ativos.find(a => a.codigo === provento.codigo);
+      if (ativo) {
+        // Procurar o provento no array de proventos do ativo que corresponde ao provento a ser removido
+        const proventoIndex = ativo.proventos.findIndex(p => 
+          p.data === provento.data && 
+          p.valor === provento.valor && 
+          p.tipo === provento.tipo
+        );
+        
+        if (proventoIndex !== -1) {
+          actions.removeProvento(provento.codigo, proventoIndex);
+          
+          // Forçar uma atualização do componente após a remoção do provento
+          setTimeout(() => {
+            if (isMounted.current) {
+              setLastUpdate(Date.now());
+            }
+          }, 50);
+          
+          alert('Provento removido com sucesso!');
+        }
+      }
+    }
   };
 
   const handleChange = (e) => {
@@ -77,6 +239,13 @@ const ProventosComponent = () => {
       [e.target.name]: e.target.value
     });
   };
+
+  // Limpar a referência quando o componente for desmontado
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const getTipoColor = (tipo) => {
     switch (tipo) {
@@ -154,36 +323,71 @@ const ProventosComponent = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {todosProventos.map((provento, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center justify-center w-10 h-10 bg-success-100 rounded-lg">
-                    <DollarSign className="h-5 w-5 text-success-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-medium text-gray-900">{provento.codigo}</span>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getTipoColor(provento.tipo)}`}>
-                        {provento.tipo}
-                      </span>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        provento.tipo_ativo === 'ACAO' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {provento.tipo_ativo}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      {formatDate(provento.data)}
-                    </p>
-                  </div>
+          <div className="space-y-6">
+            {proventosAgrupados.map((grupo, grupoIndex) => (
+              <div key={grupoIndex} className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                  <h5 className="text-sm font-medium text-gray-900 flex items-center">
+                    <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                    {grupo.data}
+                  </h5>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-success-600">
-                    {formatCurrency(provento.valor)}
-                  </p>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ativo</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {grupo.proventos.map((prov) => (
+                        <tr key={prov.listIndex} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            <div className="flex items-center">
+                              <span className="font-medium">{prov.codigo}</span>
+                              <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                prov.tipo_ativo === 'ACAO' 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {prov.tipo_ativo}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTipoColor(prov.tipo)}`}>
+                              {prov.tipo}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            {formatCurrency(prov.valor)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleEditProvento(prov)}
+                                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
+                                title="Editar provento"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveProvento(prov)}
+                                className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full transition-colors"
+                                title="Remover provento"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             ))}
