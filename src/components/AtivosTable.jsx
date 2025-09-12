@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
 import { ArrowUpDown, Plus, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import AddAtivoModal from './AddAtivoModal';
+import DetalheAtivo from './DetalheAtivo';
 
 const AtivosTable = () => {
   const { state, actions } = useInvestment();
@@ -9,6 +10,8 @@ const AtivosTable = () => {
   const [sortDirection, setSortDirection] = useState('desc');
   const [filter, setFilter] = useState('TODOS');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedAtivo, setSelectedAtivo] = useState(null);
+  const [showDetalheModal, setShowDetalheModal] = useState(false);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -70,6 +73,16 @@ const AtivosTable = () => {
     if (window.confirm(`Tem certeza que deseja remover o ativo ${codigo}?`)) {
       actions.removeAtivo(codigo);
     }
+  };
+
+  const handleViewAtivo = (ativo) => {
+    setSelectedAtivo(ativo);
+    setShowDetalheModal(true);
+  };
+
+  const handleCloseDetalheModal = () => {
+    setShowDetalheModal(false);
+    setSelectedAtivo(null);
   };
 
   return (
@@ -234,12 +247,17 @@ const AtivosTable = () => {
                   <td className="table-cell text-gray-500">{formatDate(ativo.dataCompra)}</td>
                   <td className="table-cell">
                     <div className="flex items-center space-x-2">
-                      <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                      <button 
+                        onClick={() => handleViewAtivo(ativo)}
+                        className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Ver detalhes"
+                      >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button 
                         onClick={() => handleRemoveAtivo(ativo.codigo)}
                         className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Remover ativo"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -279,7 +297,14 @@ const AtivosTable = () => {
       {/* Modal de Adicionar Ativo */}
       <AddAtivoModal 
         isOpen={showAddModal} 
-        onClose={() => setShowAddModal(false)} 
+        onClose={() => setShowAddModal(false)}
+      />
+
+      {/* Modal de Detalhe do Ativo */}
+      <DetalheAtivo
+        isOpen={showDetalheModal}
+        onClose={handleCloseDetalheModal}
+        ativo={selectedAtivo}
       />
     </div>
   );
