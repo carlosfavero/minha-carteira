@@ -40,14 +40,22 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     if (!ativoLocal || !ativoLocal.operacoes) return [];
 
     // Ordenar operações por data (mais recentes primeiro)
-    const operacoesOrdenadas = [...ativoLocal.operacoes].sort((a, b) => 
-      new Date(b.data) - new Date(a.data)
-    );
+    const operacoesOrdenadas = [...ativoLocal.operacoes].sort((a, b) => {
+      // Criar datas no formato YYYY-MM-DD para evitar problemas de fuso horário
+      const dataA = a.data.split('T')[0];
+      const dataB = b.data.split('T')[0];
+      return new Date(dataB) - new Date(dataA);
+    });
 
     // Agrupar por data
     const grupos = {};
     operacoesOrdenadas.forEach((op, index) => {
-      const dataFormatada = format(new Date(op.data), 'dd/MM/yyyy');
+      // Normalizar a data para evitar problemas de fuso horário
+      // Extrair apenas a parte da data (YYYY-MM-DD) e então formatar
+      const dataPura = op.data.split('T')[0];
+      const [ano, mes, dia] = dataPura.split('-');
+      const dataFormatada = `${dia}/${mes}/${ano}`;
+      
       if (!grupos[dataFormatada]) {
         grupos[dataFormatada] = [];
       }
@@ -74,7 +82,32 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    try {
+      // Se for uma data no formato ISO (yyyy-MM-dd)
+      if (dateString.includes('-')) {
+        // Extrair a parte da data ignorando o T e o timestamp se existir
+        const dataPura = dateString.split('T')[0];
+        const [ano, mes, dia] = dataPura.split('-');
+        return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+      }
+      
+      // Se já estiver no formato dd/MM/yyyy
+      if (dateString.includes('/') && dateString.split('/').length === 3) {
+        const parts = dateString.split('/');
+        if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+          return dateString;
+        }
+      }
+      
+      // Para outros formatos, usar o date-fns
+      // Criar uma data sem considerar o fuso horário
+      const dateObj = new Date(dateString);
+      return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+    } catch (e) {
+      console.error("Erro ao formatar data:", e);
+      // Fallback para o método original
+      return new Date(dateString).toLocaleDateString('pt-BR');
+    }
   };
 
   // Handlers
@@ -100,8 +133,31 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       return;
     }
 
+    // Garantir que a data seja processada corretamente, evitando problemas de fuso horário
+    const dataInput = formOperacao.data;
+    let dataFormatada;
+    
+    // Normalizar a data para o formato YYYY-MM-DD sem componente de tempo
+    if (dataInput.includes('-')) {
+      // Se já está no formato YYYY-MM-DD ou YYYY-MM-DDT...
+      dataFormatada = dataInput.split('T')[0]; // Remover a parte do tempo se existir
+    } else if (dataInput.includes('/')) {
+      // Se está no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataInput.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter
+      try {
+        const dateObj = new Date(dataInput);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o input original se houver erro
+        dataFormatada = dataInput;
+      }
+    }
+    
     const novaOperacao = {
-      data: formOperacao.data,
+      data: dataFormatada, // Formato yyyy-MM-dd consistente sem componente de tempo
       tipo: formOperacao.tipo,
       quantidade: parseInt(formOperacao.quantidade),
       preco: parseFloat(formOperacao.preco),
@@ -140,12 +196,37 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
 
   const handleEditOperacao = (operacaoIndex) => {
     const operacao = ativoLocal.operacoes[operacaoIndex];
+    
+    // Garantir que a data esteja no formato YYYY-MM-DD para o input date
+    // Para evitar problemas de fuso horário, normalizamos a data
+    const dataOriginal = operacao.data;
+    let dataFormatada;
+    
+    // Normalizar para formato YYYY-MM-DD sem componente de tempo
+    if (dataOriginal.includes('-')) {
+      // Remover qualquer componente de tempo se existir
+      dataFormatada = dataOriginal.split('T')[0];
+    } else if (dataOriginal.includes('/')) {
+      // Se estiver no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataOriginal.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter manualmente para evitar problemas de fuso horário
+      try {
+        const dateObj = new Date(dataOriginal);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o formato original se houver erro
+        dataFormatada = dataOriginal;
+      }
+    }
+    
     setFormOperacao({
       tipo: operacao.tipo,
       quantidade: operacao.quantidade.toString(),
       preco: operacao.preco.toString(),
       corretagem: operacao.corretagem ? operacao.corretagem.toString() : '',
-      data: operacao.data
+      data: dataFormatada
     });
     setEditingOperacaoIndex(operacaoIndex);
     setShowAddOperacao(true);
