@@ -46,7 +46,6 @@ const AddAtivoModal = ({ isOpen, onClose }) => {
       percentualCarteira: 0, // Será calculado posteriormente
       percentualIdeal: 2.99,
       comprar: false,
-      dataCompra: formData.data,
       proventos: [],
       operacoes: [
         {

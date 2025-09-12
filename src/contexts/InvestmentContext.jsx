@@ -16,7 +16,6 @@ const initialData = {
       percentualCarteira: 3.90,
       percentualIdeal: 2.99,
       comprar: false,
-      dataCompra: "2025-08-19",
       proventos: [
         {
           data: "2025-07-15",
@@ -48,7 +47,6 @@ const initialData = {
       percentualCarteira: 6.05,
       percentualIdeal: 5.00,
       comprar: false,
-      dataCompra: "2025-07-10",
       proventos: [
         {
           data: "2025-08-30",
