@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
 import { X, TrendingUp, TrendingDown, DollarSign, Plus, Calendar, Edit, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -8,6 +8,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const { actions, state } = useInvestment();
   const [ativoLocal, setAtivoLocal] = useState(ativoProp);
   const [activeTab, setActiveTab] = useState('resumo');
+  const [lastUpdate, setLastUpdate] = useState(Date.now()); // Estado para controlar atualizações
   const [formOperacao, setFormOperacao] = useState({
     tipo: 'COMPRA',
     quantidade: '',
@@ -20,6 +21,14 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const [formCotacao, setFormCotacao] = useState({
     valor: ativoProp ? ativoProp.cotacaoAtual.toString() : ''
   });
+  const isMounted = useRef(true); // Referência para verificar se o componente está montado
+
+  // Limpar a referência quando o componente for desmontado
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   // Atualizar o ativo local quando o ativo prop mudar
   useEffect(() => {
@@ -100,7 +109,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       data,
       operacoes: grupos[data]
     }));
-  }, [ativoLocal, JSON.stringify(ativoLocal?.operacoes)]);
+  }, [ativoLocal, JSON.stringify(ativoLocal?.operacoes), lastUpdate]);
 
   // Formatadores
   const formatCurrency = (value) => {
@@ -323,18 +332,38 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const handleRemoveOperacao = (operacaoIndex) => {
     if (window.confirm('Tem certeza que deseja remover esta operação? Esta ação afetará todos os cálculos do ativo.')) {
       const codigoAtivo = ativoLocal.codigo;
+      
+      // Criar uma cópia local das operações sem a operação a ser removida
+      const novasOperacoesLocal = ativoLocal.operacoes.filter((_, i) => i !== operacaoIndex);
+      
+      // Criar um novo ativoLocal com as operações atualizadas
+      const novoAtivoLocal = {
+        ...ativoLocal,
+        operacoes: novasOperacoesLocal
+      };
+      
+      // Atualizar o estado local primeiro para resposta imediata da UI
+      setAtivoLocal(novoAtivoLocal);
+      
+      // Disparar atualização para forçar recálculo de operacoesAgrupadas
+      setLastUpdate(Date.now());
+      
+      // Chamar a ação para atualizar o estado global
       actions.removeOperacao(codigoAtivo, operacaoIndex);
       
-      // Atualizar o estado local com os dados mais recentes do estado global
+      // Atualizar o estado local novamente após um breve atraso para sincronizar com o estado global
       setTimeout(() => {
-        const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
-        if (ativoAtualizado) {
-          setAtivoLocal(ativoAtualizado);
-        } else {
-          // Se o ativo foi removido (não existe mais no estado global), fechar o modal
-          handleClose();
+        if (isMounted.current) {
+          const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
+          if (ativoAtualizado) {
+            setAtivoLocal(ativoAtualizado);
+            setLastUpdate(Date.now()); // Forçar nova atualização
+          } else {
+            // Se o ativo foi removido (não existe mais no estado global), fechar o modal
+            handleClose();
+          }
         }
-      }, 10);
+      }, 50); // Aumentar o tempo para garantir que o estado global foi atualizado
       
       alert('Operação removida com sucesso!');
     }
