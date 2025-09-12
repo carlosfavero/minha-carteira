@@ -86,6 +86,8 @@ const actionTypes = {
   UPDATE_OPERACAO: 'UPDATE_OPERACAO',
   REMOVE_OPERACAO: 'REMOVE_OPERACAO',
   ADD_PROVENTO: 'ADD_PROVENTO',
+  UPDATE_PROVENTO: 'UPDATE_PROVENTO',
+  REMOVE_PROVENTO: 'REMOVE_PROVENTO',
   UPDATE_CONFIGURACOES: 'UPDATE_CONFIGURACOES',
   LOAD_DATA: 'LOAD_DATA',
   SAVE_DATA: 'SAVE_DATA'
@@ -252,6 +254,45 @@ const investmentReducer = (state, action) => {
       return { ...state, ativos: novosAtivos };
     }
 
+    case actionTypes.UPDATE_PROVENTO: {
+      const { codigo, index, provento } = action.payload;
+      const novosAtivos = state.ativos.map(ativo => {
+        if (ativo.codigo === codigo) {
+          const novosProventos = [...ativo.proventos];
+          novosProventos[index] = provento;
+          const novoDividendYield = calcularDividendYield(novosProventos, ativo.valorInvestido);
+
+          return {
+            ...ativo,
+            proventos: novosProventos,
+            dividendYield: novoDividendYield
+          };
+        }
+        return ativo;
+      });
+
+      return { ...state, ativos: novosAtivos };
+    }
+
+    case actionTypes.REMOVE_PROVENTO: {
+      const { codigo, index } = action.payload;
+      const novosAtivos = state.ativos.map(ativo => {
+        if (ativo.codigo === codigo) {
+          const novosProventos = ativo.proventos.filter((_, i) => i !== index);
+          const novoDividendYield = calcularDividendYield(novosProventos, ativo.valorInvestido);
+
+          return {
+            ...ativo,
+            proventos: novosProventos,
+            dividendYield: novoDividendYield
+          };
+        }
+        return ativo;
+      });
+
+      return { ...state, ativos: novosAtivos };
+    }
+
     case actionTypes.UPDATE_CONFIGURACOES:
       return {
         ...state,
@@ -320,6 +361,14 @@ export const InvestmentProvider = ({ children }) => {
     dispatch({ type: actionTypes.ADD_PROVENTO, payload: { codigo, provento } });
   };
 
+  const updateProvento = (codigo, index, provento) => {
+    dispatch({ type: actionTypes.UPDATE_PROVENTO, payload: { codigo, index, provento } });
+  };
+
+  const removeProvento = (codigo, index) => {
+    dispatch({ type: actionTypes.REMOVE_PROVENTO, payload: { codigo, index } });
+  };
+
   const updateConfiguracoes = (configuracoes) => {
     dispatch({ type: actionTypes.UPDATE_CONFIGURACOES, payload: configuracoes });
   };
@@ -367,6 +416,8 @@ export const InvestmentProvider = ({ children }) => {
       updateOperacao,
       removeOperacao,
       addProvento,
+      updateProvento,
+      removeProvento,
       updateConfiguracoes
     },
     computed: {

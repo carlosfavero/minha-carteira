@@ -21,6 +21,14 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const [formCotacao, setFormCotacao] = useState({
     valor: ativoProp ? ativoProp.cotacaoAtual.toString() : ''
   });
+  // Estados para gerenciar proventos
+  const [showAddProvento, setShowAddProvento] = useState(false);
+  const [editingProventoIndex, setEditingProventoIndex] = useState(null);
+  const [formProvento, setFormProvento] = useState({
+    tipo: 'RENDIMENTO',
+    valor: '',
+    data: format(new Date(), 'yyyy-MM-dd')
+  });
   const isMounted = useRef(true); // Referência para verificar se o componente está montado
 
   // Limpar a referência quando o componente for desmontado
@@ -52,10 +60,16 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const handleClose = () => {
     // Resetar o formulário de operação
     resetOperacaoForm();
+    // Resetar o formulário de provento
+    resetProventoForm();
     // Ocultar o formulário de adição de operação
     setShowAddOperacao(false);
+    // Ocultar o formulário de adição de provento
+    setShowAddProvento(false);
     // Limpar o índice de operação em edição
     setEditingOperacaoIndex(null);
+    // Limpar o índice de provento em edição
+    setEditingProventoIndex(null);
     // Resetar para a aba resumo
     setActiveTab('resumo');
     // Chamar a função de fechamento original
@@ -110,6 +124,46 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       operacoes: grupos[data]
     }));
   }, [ativoLocal, JSON.stringify(ativoLocal?.operacoes), lastUpdate]);
+
+  // Agrupar proventos por data
+  const proventosAgrupados = useMemo(() => {
+    if (!ativoLocal || !ativoLocal.proventos) return [];
+
+    // Fazer uma cópia profunda para evitar problemas de referência
+    const proventosClone = JSON.parse(JSON.stringify(ativoLocal.proventos));
+
+    // Ordenar proventos por data (mais recentes primeiro)
+    const proventosOrdenados = proventosClone.map((prov, index) => ({
+      ...prov,
+      originalIndex: index // Armazenar o índice original
+    })).sort((a, b) => {
+      // Criar datas no formato YYYY-MM-DD para evitar problemas de fuso horário
+      const dataA = a.data.split('T')[0];
+      const dataB = b.data.split('T')[0];
+      return new Date(dataB) - new Date(dataA);
+    });
+
+    // Agrupar por data
+    const grupos = {};
+    proventosOrdenados.forEach((prov) => {
+      // Normalizar a data para evitar problemas de fuso horário
+      // Extrair apenas a parte da data (YYYY-MM-DD) e então formatar
+      const dataPura = prov.data.split('T')[0];
+      const [ano, mes, dia] = dataPura.split('-');
+      const dataFormatada = `${dia}/${mes}/${ano}`;
+      
+      if (!grupos[dataFormatada]) {
+        grupos[dataFormatada] = [];
+      }
+      grupos[dataFormatada].push(prov);
+    });
+
+    // Converter para array
+    return Object.keys(grupos).map(data => ({
+      data,
+      proventos: grupos[data]
+    }));
+  }, [ativoLocal, JSON.stringify(ativoLocal?.proventos), lastUpdate]);
 
   // Formatadores
   const formatCurrency = (value) => {
@@ -375,6 +429,178 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       quantidade: '',
       preco: '',
       corretagem: '',
+      data: format(new Date(), 'yyyy-MM-dd')
+    });
+  };
+
+  // Funções para manipular proventos
+  const handleProventoChange = (e) => {
+    setFormProvento({
+      ...formProvento,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleAddProvento = (e) => {
+    e.preventDefault();
+    
+    if (!formProvento.valor || !formProvento.data) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    // Garantir que a data seja processada corretamente, evitando problemas de fuso horário
+    const dataInput = formProvento.data;
+    let dataFormatada;
+    
+    // Normalizar a data para o formato YYYY-MM-DD sem componente de tempo
+    if (dataInput.includes('-')) {
+      // Se já está no formato YYYY-MM-DD ou YYYY-MM-DDT...
+      dataFormatada = dataInput.split('T')[0]; // Remover a parte do tempo se existir
+    } else if (dataInput.includes('/')) {
+      // Se está no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataInput.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter
+      try {
+        const dateObj = new Date(dataInput);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o input original se houver erro
+        dataFormatada = dataInput;
+      }
+    }
+    
+    const novoProvento = {
+      data: dataFormatada, // Formato yyyy-MM-dd consistente sem componente de tempo
+      tipo: formProvento.tipo,
+      valor: parseFloat(formProvento.valor)
+    };
+
+    // Desativar a atualização automática do ativoLocal temporariamente
+    // para evitar a piscada causada pela atualização dupla
+    let novoAtivoLocal;
+    
+    if (editingProventoIndex !== null) {
+      // Modo de edição
+      // 1. Atualizar o estado global primeiro
+      actions.updateProvento(ativoLocal.codigo, editingProventoIndex, novoProvento);
+      
+      // 2. Criar uma cópia profunda do ativo para atualização local
+      novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
+      novoAtivoLocal.proventos[editingProventoIndex] = novoProvento;
+      
+      // 3. Atualizar o estado local com os cálculos completos
+      setAtivoLocal(novoAtivoLocal);
+      
+      alert('Provento atualizado com sucesso!');
+    } else {
+      // Modo de adição
+      // 1. Atualizar o estado global primeiro
+      actions.addProvento(ativoLocal.codigo, novoProvento);
+      
+      // 2. Criar uma cópia profunda do ativo para atualização local
+      novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
+      novoAtivoLocal.proventos.push(novoProvento);
+      
+      // 3. Atualizar o estado local com os cálculos completos
+      setAtivoLocal(novoAtivoLocal);
+      
+      alert('Provento adicionado com sucesso!');
+    }
+    
+    // Reset form e interface
+    resetProventoForm();
+    setEditingProventoIndex(null);
+    setShowAddProvento(false);
+    setLastUpdate(Date.now());
+  };
+
+  const handleEditProvento = (proventoIndex) => {
+    const provento = ativoLocal.proventos[proventoIndex];
+    if (!provento) {
+      console.error(`Provento com índice ${proventoIndex} não encontrado`);
+      return;
+    }
+    
+    // Garantir que a data esteja no formato YYYY-MM-DD para o input date
+    // Para evitar problemas de fuso horário, normalizamos a data
+    const dataOriginal = provento.data;
+    let dataFormatada;
+    
+    // Normalizar para formato YYYY-MM-DD sem componente de tempo
+    if (dataOriginal.includes('-')) {
+      // Remover qualquer componente de tempo se existir
+      dataFormatada = dataOriginal.split('T')[0];
+    } else if (dataOriginal.includes('/')) {
+      // Se estiver no formato DD/MM/YYYY
+      const [dia, mes, ano] = dataOriginal.split('/');
+      dataFormatada = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    } else {
+      // Outros formatos, tentar converter manualmente para evitar problemas de fuso horário
+      try {
+        const dateObj = new Date(dataOriginal);
+        dataFormatada = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        // Fallback para o formato original se houver erro
+        dataFormatada = dataOriginal;
+      }
+    }
+    
+    setFormProvento({
+      tipo: provento.tipo,
+      valor: provento.valor.toString(),
+      data: dataFormatada
+    });
+    setEditingProventoIndex(proventoIndex);
+    setShowAddProvento(true);
+  };
+
+  const handleRemoveProvento = (proventoIndex) => {
+    if (window.confirm('Tem certeza que deseja remover este provento? Esta ação afetará todos os cálculos do ativo.')) {
+      const codigoAtivo = ativoLocal.codigo;
+      
+      // Criar uma cópia local dos proventos sem o provento a ser removido
+      const novosProventosLocal = ativoLocal.proventos.filter((_, i) => i !== proventoIndex);
+      
+      // Criar um novo ativoLocal com os proventos atualizados
+      const novoAtivoLocal = {
+        ...ativoLocal,
+        proventos: novosProventosLocal
+      };
+      
+      // Atualizar o estado local primeiro para resposta imediata da UI
+      setAtivoLocal(novoAtivoLocal);
+      
+      // Disparar atualização para forçar recálculo de proventosAgrupados
+      setLastUpdate(Date.now());
+      
+      // Chamar a ação para atualizar o estado global
+      actions.removeProvento(codigoAtivo, proventoIndex);
+      
+      // Atualizar o estado local novamente após um breve atraso para sincronizar com o estado global
+      setTimeout(() => {
+        if (isMounted.current) {
+          const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
+          if (ativoAtualizado) {
+            setAtivoLocal(ativoAtualizado);
+            setLastUpdate(Date.now()); // Forçar nova atualização
+          } else {
+            // Se o ativo foi removido (não existe mais no estado global), fechar o modal
+            handleClose();
+          }
+        }
+      }, 50); // Aumentar o tempo para garantir que o estado global foi atualizado
+      
+      alert('Provento removido com sucesso!');
+    }
+  };
+
+  const resetProventoForm = () => {
+    setFormProvento({
+      tipo: 'RENDIMENTO',
+      valor: '',
       data: format(new Date(), 'yyyy-MM-dd')
     });
   };
@@ -836,36 +1062,168 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
           {/* Tab Proventos */}
           {activeTab === 'proventos' && (
             <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-4">Histórico de Proventos</h4>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="table-header">Data</th>
-                      <th className="table-header">Tipo</th>
-                      <th className="table-header">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {ativoLocal.proventos.map((prov, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="table-cell">{formatDate(prov.data)}</td>
-                        <td className="table-cell">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {prov.tipo}
-                          </span>
-                        </td>
-                        <td className="table-cell">{formatCurrency(prov.valor)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-sm font-medium text-gray-900">Histórico de Proventos</h4>
+                <button
+                  onClick={() => {
+                    resetProventoForm();
+                    setEditingProventoIndex(null);
+                    setShowAddProvento(true);
+                  }}
+                  className="btn-primary-sm flex items-center space-x-1"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Novo Provento</span>
+                </button>
               </div>
+              
+              {/* Formulário para adicionar/editar provento */}
+              {showAddProvento && (
+                <div className="bg-white p-4 mb-6 rounded-lg border border-gray-200">
+                  <h5 className="text-sm font-medium text-gray-900 mb-3">
+                    {editingProventoIndex !== null ? 'Editar Provento' : 'Adicionar Provento'}
+                  </h5>
+                  
+                  <form onSubmit={handleAddProvento} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Data *
+                        </label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            type="date"
+                            name="data"
+                            value={formProvento.data}
+                            onChange={handleProventoChange}
+                            className="input-field pl-9"
+                            required
+                          />
+                        </div>
+                      </div>
 
-              {ativoLocal.proventos.length === 0 && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tipo *
+                        </label>
+                        <select
+                          name="tipo"
+                          value={formProvento.tipo}
+                          onChange={handleProventoChange}
+                          className="input-field"
+                          required
+                        >
+                          <option value="RENDIMENTO">Rendimento</option>
+                          <option value="DIVIDENDO">Dividendo</option>
+                          <option value="JCP">JCP</option>
+                          <option value="AMORTIZACAO">Amortização</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Valor (R$) *
+                        </label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            type="number"
+                            name="valor"
+                            value={formProvento.valor}
+                            onChange={handleProventoChange}
+                            className="input-field pl-9"
+                            placeholder="45.50"
+                            step="0.01"
+                            min="0"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetProventoForm();
+                          setShowAddProvento(false);
+                          setEditingProventoIndex(null);
+                        }}
+                        className="btn-secondary-sm"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-primary-sm"
+                      >
+                        {editingProventoIndex !== null ? 'Atualizar' : 'Adicionar'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Proventos Agrupados por Data */}
+              {ativoLocal && ativoLocal.proventos && ativoLocal.proventos.length > 0 ? (
+                <div className="space-y-6">
+                  {proventosAgrupados.map((grupo, grupoIndex) => (
+                    <div key={grupoIndex} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                        <h5 className="text-sm font-medium text-gray-900 flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                          {grupo.data}
+                        </h5>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="table-header">Tipo</th>
+                              <th className="table-header">Valor</th>
+                              <th className="table-header">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {grupo.proventos.map((prov) => (
+                              <tr key={prov.originalIndex} className="hover:bg-gray-50">
+                                <td className="table-cell">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {prov.tipo}
+                                  </span>
+                                </td>
+                                <td className="table-cell">{formatCurrency(prov.valor)}</td>
+                                <td className="table-cell">
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => handleEditProvento(prov.originalIndex)}
+                                      className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
+                                      title="Editar provento"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveProvento(prov.originalIndex)}
+                                      className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full transition-colors"
+                                      title="Remover provento"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">Nenhum provento registrado para este ativoLocal.</p>
+                  <p className="text-gray-500">Nenhum provento registrado para este ativo.</p>
                 </div>
               )}
             </div>
