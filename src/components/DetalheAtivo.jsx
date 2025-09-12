@@ -224,7 +224,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
               </span>
             </h3>
             <p className="text-sm text-gray-500">
-              {ativoLocal.quantidade} {ativoLocal.quantidade > 1 ? 'unidades' : 'unidade'} • Adicionado em {formatDate(ativoLocal.dataCompra)}
+              {ativoLocal.quantidade} {ativoLocal.quantidade > 1 ? 'unidades' : 'unidade'}
             </p>
           </div>
           <button 
@@ -367,10 +367,6 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Quantidade</div>
                     <div className="px-4 py-3 text-gray-900 col-span-2">{ativoLocal.quantidade}</div>
-                  </div>
-                  <div className="grid grid-cols-3 text-sm">
-                    <div className="px-4 py-3 text-gray-500">Data de Compra</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatDate(ativoLocal.dataCompra)}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Preço Médio</div>
