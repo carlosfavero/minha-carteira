@@ -198,7 +198,6 @@ const AtivosTable = () => {
                     {getSortIcon('dividendYield')}
                   </div>
                 </th>
-                <th className="table-header">Data Compra</th>
                 <th className="table-header">Ações</th>
               </tr>
             </thead>
@@ -244,7 +243,6 @@ const AtivosTable = () => {
                     </div>
                   </td>
                   <td className="table-cell text-gray-900">{formatPercentage(ativo.dividendYield)}</td>
-                  <td className="table-cell text-gray-500">{formatDate(ativo.dataCompra)}</td>
                   <td className="table-cell">
                     <div className="flex items-center space-x-2">
                       <button 
