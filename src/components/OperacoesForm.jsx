@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
 import { Plus, Calendar, DollarSign, Hash, Tag, Edit, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -8,6 +8,7 @@ const OperacoesForm = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingInfo, setEditingInfo] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(Date.now()); // Adicionar estado para rastrear atualizações
   const [formData, setFormData] = useState({
     codigo: '',
     tipo: 'COMPRA',
@@ -56,6 +57,7 @@ const OperacoesForm = () => {
     // Reset form
     resetForm();
     setIsOpen(false);
+    setLastUpdate(Date.now()); // Atualizar o lastUpdate para garantir re-renderização
   };
   
   const resetForm = () => {
@@ -70,6 +72,13 @@ const OperacoesForm = () => {
     setIsEditing(false);
     setEditingInfo(null);
   };
+
+  // Atualizar o componente quando o estado global mudar
+  useEffect(() => {
+    // Este efeito vai disparar sempre que state.ativos mudar
+    // forçando a atualização da lista de operações
+    setLastUpdate(Date.now());
+  }, [state.ativos]);
 
   const handleChange = (e) => {
     setFormData({
@@ -123,6 +132,13 @@ const OperacoesForm = () => {
   const handleRemoveOperacao = (operacao) => {
     if (window.confirm(`Tem certeza que deseja remover esta operação de ${operacao.codigo}? Esta ação afetará todos os cálculos do ativo.`)) {
       actions.removeOperacao(operacao.codigo, operacao.originalIndex);
+      
+      // Forçar uma atualização do componente após a remoção da operação
+      setTimeout(() => {
+        // Atualizar o estado lastUpdate para forçar uma re-renderização
+        setLastUpdate(Date.now());
+      }, 10);
+      
       alert('Operação removida com sucesso!');
     }
   };
@@ -203,7 +219,7 @@ const OperacoesForm = () => {
       data,
       operacoes: grupos[data]
     })).slice(0, 5); // Limitar a 5 grupos para não sobrecarregar a interface
-  }, [state.ativos]);
+  }, [state.ativos, lastUpdate]); // Adicionar lastUpdate como dependência
 
   return (
     <div className="space-y-6">
