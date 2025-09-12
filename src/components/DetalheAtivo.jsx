@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
-import { X, TrendingUp, TrendingDown, DollarSign, Plus, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
+import { X, TrendingUp, TrendingDown, DollarSign, Plus, Calendar, Edit, Trash2 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
+const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const { actions } = useInvestment();
+  const [ativoLocal, setAtivoLocal] = useState(ativoProp);
   const [activeTab, setActiveTab] = useState('resumo');
   const [formOperacao, setFormOperacao] = useState({
     tipo: 'COMPRA',
@@ -14,9 +16,50 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
     data: format(new Date(), 'yyyy-MM-dd')
   });
   const [showAddOperacao, setShowAddOperacao] = useState(false);
+  const [editingOperacaoIndex, setEditingOperacaoIndex] = useState(null);
   const [formCotacao, setFormCotacao] = useState({
-    valor: ativo ? ativo.cotacaoAtual.toString() : ''
+    valor: ativoProp ? ativoProp.cotacaoAtual.toString() : ''
   });
+
+  // Atualizar o ativo local quando o ativo prop mudar
+  useEffect(() => {
+    setAtivoLocal(ativoProp);
+  }, [ativoProp]);
+
+  // Atualizar o formulário de cotação quando o ativo mudar
+  useEffect(() => {
+    if (ativoLocal) {
+      setFormCotacao({
+        valor: ativoLocal.cotacaoAtual.toString()
+      });
+    }
+  }, [ativoLocal]);
+
+  // Agrupar operações por data
+  const operacoesAgrupadas = useMemo(() => {
+    if (!ativoLocal || !ativoLocal.operacoes) return [];
+
+    // Ordenar operações por data (mais recentes primeiro)
+    const operacoesOrdenadas = [...ativoLocal.operacoes].sort((a, b) => 
+      new Date(b.data) - new Date(a.data)
+    );
+
+    // Agrupar por data
+    const grupos = {};
+    operacoesOrdenadas.forEach((op, index) => {
+      const dataFormatada = format(new Date(op.data), 'dd/MM/yyyy');
+      if (!grupos[dataFormatada]) {
+        grupos[dataFormatada] = [];
+      }
+      grupos[dataFormatada].push({...op, index});
+    });
+
+    // Converter para array
+    return Object.keys(grupos).map(data => ({
+      data,
+      operacoes: grupos[data]
+    }));
+  }, [ativoLocal, ativoLocal?.operacoes]);
 
   // Formatadores
   const formatCurrency = (value) => {
@@ -66,9 +109,67 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
       corretagem: parseFloat(formOperacao.corretagem) || 0
     };
 
-    actions.addOperacao(ativo.codigo, novaOperacao);
+    if (editingOperacaoIndex !== null) {
+      // Modo de edição
+      actions.updateOperacao(ativoLocal.codigo, editingOperacaoIndex, novaOperacao);
+      
+      // Atualizar localmente para feedback imediato
+      const ativoAtualizado = {...ativoLocal};
+      ativoAtualizado.operacoes[editingOperacaoIndex] = novaOperacao;
+      setAtivoLocal(ativoAtualizado);
+      
+      alert('Operação atualizada com sucesso!');
+    } else {
+      // Modo de adição
+      actions.addOperacao(ativoLocal.codigo, novaOperacao);
+      
+      // Atualizar localmente para feedback imediato
+      const ativoAtualizado = {...ativoLocal};
+      ativoAtualizado.operacoes = [...ativoAtualizado.operacoes, novaOperacao];
+      setAtivoLocal(ativoAtualizado);
+      
+      alert('Operação adicionada com sucesso!');
+    }
     
     // Reset form
+    resetOperacaoForm();
+    
+    setEditingOperacaoIndex(null);
+    setShowAddOperacao(false);
+  };
+
+  const handleEditOperacao = (operacaoIndex) => {
+    const operacao = ativoLocal.operacoes[operacaoIndex];
+    setFormOperacao({
+      tipo: operacao.tipo,
+      quantidade: operacao.quantidade.toString(),
+      preco: operacao.preco.toString(),
+      corretagem: operacao.corretagem ? operacao.corretagem.toString() : '',
+      data: operacao.data
+    });
+    setEditingOperacaoIndex(operacaoIndex);
+    setShowAddOperacao(true);
+  };
+
+  const handleRemoveOperacao = (operacaoIndex) => {
+    if (window.confirm('Tem certeza que deseja remover esta operação? Esta ação afetará todos os cálculos do ativoLocal.')) {
+      actions.removeOperacao(ativoLocal.codigo, operacaoIndex);
+      
+      // Atualizar localmente para feedback imediato
+      const ativoAtualizado = {...ativoLocal};
+      ativoAtualizado.operacoes = ativoAtualizado.operacoes.filter((_, i) => i !== operacaoIndex);
+      setAtivoLocal(ativoAtualizado);
+      
+      alert('Operação removida com sucesso!');
+      
+      // Se era a última operação, o ativo foi removido, então feche o modal
+      if (ativoLocal.operacoes.length === 1) {
+        onClose();
+      }
+    }
+  };
+
+  const resetOperacaoForm = () => {
     setFormOperacao({
       tipo: 'COMPRA',
       quantidade: '',
@@ -76,9 +177,6 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
       corretagem: '',
       data: format(new Date(), 'yyyy-MM-dd')
     });
-    
-    setShowAddOperacao(false);
-    alert('Operação adicionada com sucesso!');
   };
 
   const handleUpdateCotacao = (e) => {
@@ -90,23 +188,24 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
     }
 
     const cotacaoAtual = parseFloat(formCotacao.valor);
-    const valorAtual = ativo.quantidade * cotacaoAtual;
-    const rentabilidade = ativo.valorInvestido > 0 ? 
-      ((valorAtual - ativo.valorInvestido) / ativo.valorInvestido) * 100 : 0;
+    const valorAtual = ativoLocal.quantidade * cotacaoAtual;
+    const rentabilidade = ativoLocal.valorInvestido > 0 ? 
+      ((valorAtual - ativoLocal.valorInvestido) / ativoLocal.valorInvestido) * 100 : 0;
 
     const ativoAtualizado = {
-      ...ativo,
+      ...ativoLocal,
       cotacaoAtual: cotacaoAtual,
       valorAtual: valorAtual,
       rentabilidade: rentabilidade
     };
 
     actions.updateAtivo(ativoAtualizado);
+    setAtivoLocal(ativoAtualizado);
     alert('Cotação atualizada com sucesso!');
     onClose(); // Fecha o modal após atualizar a cotação
   };
 
-  if (!isOpen || !ativo) return null;
+  if (!isOpen || !ativoLocal) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -115,17 +214,17 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-              <span className="mr-2">{ativo.codigo}</span>
+              <span className="mr-2">{ativoLocal.codigo}</span>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                ativo.tipo === 'ACAO' 
+                ativoLocal.tipo === 'ACAO' 
                   ? 'bg-blue-100 text-blue-800' 
                   : 'bg-green-100 text-green-800'
               }`}>
-                {ativo.tipo}
+                {ativoLocal.tipo}
               </span>
             </h3>
             <p className="text-sm text-gray-500">
-              {ativo.quantidade} {ativo.quantidade > 1 ? 'unidades' : 'unidade'} • Adicionado em {formatDate(ativo.dataCompra)}
+              {ativoLocal.quantidade} {ativoLocal.quantidade > 1 ? 'unidades' : 'unidade'} • Adicionado em {formatDate(ativoLocal.dataCompra)}
             </p>
           </div>
           <button 
@@ -140,19 +239,19 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Preço Médio</p>
-            <p className="text-lg font-semibold">{formatCurrency(ativo.precoMedio)}</p>
+            <p className="text-lg font-semibold">{formatCurrency(ativoLocal.precoMedio)}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Cotação Atual</p>
-            <p className="text-lg font-semibold">{formatCurrency(ativo.cotacaoAtual)}</p>
+            <p className="text-lg font-semibold">{formatCurrency(ativoLocal.cotacaoAtual)}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Valor Investido</p>
-            <p className="text-lg font-semibold">{formatCurrency(ativo.valorInvestido)}</p>
+            <p className="text-lg font-semibold">{formatCurrency(ativoLocal.valorInvestido)}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Valor Atual</p>
-            <p className="text-lg font-semibold">{formatCurrency(ativo.valorAtual)}</p>
+            <p className="text-lg font-semibold">{formatCurrency(ativoLocal.valorAtual)}</p>
           </div>
         </div>
 
@@ -161,21 +260,21 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Rentabilidade</p>
             <div className="flex items-center">
-              {ativo.rentabilidade >= 0 ? (
+              {ativoLocal.rentabilidade >= 0 ? (
                 <TrendingUp className="h-5 w-5 text-green-600 mr-2" />
               ) : (
                 <TrendingDown className="h-5 w-5 text-red-600 mr-2" />
               )}
               <p className={`text-lg font-semibold ${
-                ativo.rentabilidade >= 0 ? 'text-green-600' : 'text-red-600'
+                ativoLocal.rentabilidade >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatPercentage(ativo.rentabilidade)}
+                {formatPercentage(ativoLocal.rentabilidade)}
               </p>
             </div>
           </div>
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Dividend Yield</p>
-            <p className="text-lg font-semibold">{formatPercentage(ativo.dividendYield)}</p>
+            <p className="text-lg font-semibold">{formatPercentage(ativoLocal.dividendYield)}</p>
           </div>
         </div>
 
@@ -259,43 +358,43 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
                 <div className="divide-y divide-gray-200">
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Código</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativo.codigo}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativoLocal.codigo}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Tipo</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativo.tipo}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativoLocal.tipo}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Quantidade</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativo.quantidade}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{ativoLocal.quantidade}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Data de Compra</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatDate(ativo.dataCompra)}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatDate(ativoLocal.dataCompra)}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Preço Médio</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativo.precoMedio)}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativoLocal.precoMedio)}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Valor Investido</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativo.valorInvestido)}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativoLocal.valorInvestido)}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Valor Atual</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativo.valorAtual)}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatCurrency(ativoLocal.valorAtual)}</div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Rentabilidade</div>
                     <div className={`px-4 py-3 font-medium col-span-2 ${
-                      ativo.rentabilidade >= 0 ? 'text-green-600' : 'text-red-600'
+                      ativoLocal.rentabilidade >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatPercentage(ativo.rentabilidade)}
+                      {formatPercentage(ativoLocal.rentabilidade)}
                     </div>
                   </div>
                   <div className="grid grid-cols-3 text-sm">
                     <div className="px-4 py-3 text-gray-500">Dividend Yield</div>
-                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatPercentage(ativo.dividendYield)}</div>
+                    <div className="px-4 py-3 text-gray-900 col-span-2">{formatPercentage(ativoLocal.dividendYield)}</div>
                   </div>
                 </div>
               </div>
@@ -320,8 +419,17 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
               {showAddOperacao && (
                 <div className="bg-gray-50 p-4 rounded-lg mb-6">
                   <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nova Operação
+                    {editingOperacaoIndex !== null ? (
+                      <>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar Operação
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Nova Operação
+                      </>
+                    )}
                   </h4>
                   
                   <form onSubmit={handleAddOperacao} className="space-y-4">
@@ -433,7 +541,11 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
                     <div className="flex justify-end space-x-3 pt-2">
                       <button
                         type="button"
-                        onClick={() => setShowAddOperacao(false)}
+                        onClick={() => {
+                          setShowAddOperacao(false);
+                          setEditingOperacaoIndex(null);
+                          resetOperacaoForm();
+                        }}
                         className="btn-secondary"
                       >
                         Cancelar
@@ -442,52 +554,82 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
                         type="submit"
                         className="btn-primary"
                       >
-                        Adicionar Operação
+                        {editingOperacaoIndex !== null ? "Atualizar Operação" : "Adicionar Operação"}
                       </button>
                     </div>
                   </form>
                 </div>
               )}
 
-              {/* Tabela de Operações */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="table-header">Data</th>
-                      <th className="table-header">Tipo</th>
-                      <th className="table-header">Quantidade</th>
-                      <th className="table-header">Preço</th>
-                      <th className="table-header">Valor</th>
-                      <th className="table-header">Corretagem</th>
-                      <th className="table-header">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {ativo.operacoes.map((op, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="table-cell">{formatDate(op.data)}</td>
-                        <td className="table-cell">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            op.tipo === 'COMPRA' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {op.tipo}
-                          </span>
-                        </td>
-                        <td className="table-cell">{op.quantidade}</td>
-                        <td className="table-cell">{formatCurrency(op.preco)}</td>
-                        <td className="table-cell">{formatCurrency(op.valor)}</td>
-                        <td className="table-cell">{formatCurrency(op.corretagem || 0)}</td>
-                        <td className="table-cell">{formatCurrency(op.valor + (op.corretagem || 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {ativo.operacoes.length === 0 && (
+              {/* Operações Agrupadas por Data */}
+              {ativoLocal && ativoLocal.operacoes && ativoLocal.operacoes.length > 0 ? (
+                <div className="space-y-6">
+                  {operacoesAgrupadas.map((grupo, grupoIndex) => (
+                    <div key={grupoIndex} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                        <h5 className="text-sm font-medium text-gray-900 flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                          {grupo.data}
+                        </h5>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="table-header">Tipo</th>
+                              <th className="table-header">Quantidade</th>
+                              <th className="table-header">Preço</th>
+                              <th className="table-header">Valor</th>
+                              <th className="table-header">Corretagem</th>
+                              <th className="table-header">Total</th>
+                              <th className="table-header">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {grupo.operacoes.map((op) => (
+                              <tr key={op.index} className="hover:bg-gray-50">
+                                <td className="table-cell">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    op.tipo === 'COMPRA' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {op.tipo}
+                                  </span>
+                                </td>
+                                <td className="table-cell">{op.quantidade}</td>
+                                <td className="table-cell">{formatCurrency(op.preco)}</td>
+                                <td className="table-cell">{formatCurrency(op.valor)}</td>
+                                <td className="table-cell">{formatCurrency(op.corretagem || 0)}</td>
+                                <td className="table-cell">{formatCurrency(op.valor + (op.corretagem || 0))}</td>
+                                <td className="table-cell">
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => handleEditOperacao(op.index)}
+                                      className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
+                                      title="Editar operação"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveOperacao(op.index)}
+                                      className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full transition-colors"
+                                      title="Remover operação"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div className="text-center py-8 bg-gray-50 rounded-lg">
                   <p className="text-gray-500">Nenhuma operação registrada além da compra inicial.</p>
                 </div>
@@ -510,7 +652,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {ativo.proventos.map((prov, index) => (
+                    {ativoLocal.proventos.map((prov, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="table-cell">{formatDate(prov.data)}</td>
                         <td className="table-cell">
@@ -525,9 +667,9 @@ const DetalheAtivo = ({ isOpen, onClose, ativo }) => {
                 </table>
               </div>
 
-              {ativo.proventos.length === 0 && (
+              {ativoLocal.proventos.length === 0 && (
                 <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">Nenhum provento registrado para este ativo.</p>
+                  <p className="text-gray-500">Nenhum provento registrado para este ativoLocal.</p>
                 </div>
               )}
             </div>
