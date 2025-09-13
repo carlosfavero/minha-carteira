@@ -66,6 +66,22 @@ const initialData = {
       ]
     }
   ],
+  aportes: [
+    {
+      id: 1,
+      data: "2025-08-15",
+      tipo: "APORTE",
+      origem: "CARLOS",
+      valor: 5000.00
+    },
+    {
+      id: 2,
+      data: "2025-08-25",
+      tipo: "APORTE",
+      origem: "GABRIELA",
+      valor: 3000.00
+    }
+  ],
   configuracoes: {
     percentualIdealPorAtivo: 2.99,
     metaRentabilidade: 10.0,
@@ -88,6 +104,9 @@ const actionTypes = {
   ADD_PROVENTO: 'ADD_PROVENTO',
   UPDATE_PROVENTO: 'UPDATE_PROVENTO',
   REMOVE_PROVENTO: 'REMOVE_PROVENTO',
+  ADD_APORTE: 'ADD_APORTE',
+  UPDATE_APORTE: 'UPDATE_APORTE',
+  REMOVE_APORTE: 'REMOVE_APORTE',
   UPDATE_CONFIGURACOES: 'UPDATE_CONFIGURACOES',
   LOAD_DATA: 'LOAD_DATA',
   SAVE_DATA: 'SAVE_DATA'
@@ -293,6 +312,35 @@ const investmentReducer = (state, action) => {
       return { ...state, ativos: novosAtivos };
     }
 
+    case actionTypes.ADD_APORTE: {
+      const novoAporte = {
+        ...action.payload,
+        id: Date.now()  // Gera um ID único com base no timestamp
+      };
+      return {
+        ...state,
+        aportes: [...state.aportes, novoAporte]
+      };
+    }
+
+    case actionTypes.UPDATE_APORTE: {
+      const aporteAtualizado = action.payload;
+      return {
+        ...state,
+        aportes: state.aportes.map(aporte => 
+          aporte.id === aporteAtualizado.id ? aporteAtualizado : aporte
+        )
+      };
+    }
+
+    case actionTypes.REMOVE_APORTE: {
+      const idParaRemover = action.payload;
+      return {
+        ...state,
+        aportes: state.aportes.filter(aporte => aporte.id !== idParaRemover)
+      };
+    }
+
     case actionTypes.UPDATE_CONFIGURACOES:
       return {
         ...state,
@@ -373,6 +421,19 @@ export const InvestmentProvider = ({ children }) => {
     dispatch({ type: actionTypes.UPDATE_CONFIGURACOES, payload: configuracoes });
   };
 
+  // Funções para gerenciamento de aportes
+  const addAporte = (aporte) => {
+    dispatch({ type: actionTypes.ADD_APORTE, payload: aporte });
+  };
+
+  const updateAporte = (aporte) => {
+    dispatch({ type: actionTypes.UPDATE_APORTE, payload: aporte });
+  };
+
+  const removeAporte = (id) => {
+    dispatch({ type: actionTypes.REMOVE_APORTE, payload: id });
+  };
+
   // Cálculos derivados
   const getResumoCarteira = () => {
     const valorTotalInvestido = state.ativos.reduce((sum, ativo) => sum + ativo.valorInvestido, 0);
@@ -418,6 +479,9 @@ export const InvestmentProvider = ({ children }) => {
       addProvento,
       updateProvento,
       removeProvento,
+      addAporte,
+      updateAporte,
+      removeAporte,
       updateConfiguracoes
     },
     computed: {
@@ -439,5 +503,28 @@ export const useInvestment = () => {
   if (!context) {
     throw new Error('useInvestment deve ser usado dentro de InvestmentProvider');
   }
-  return context;
+  
+  // Extraindo valores para facilitar o uso
+  const { state, actions, computed } = context;
+  
+  return {
+    ativos: state.ativos,
+    aportes: state.aportes,
+    configuracoes: state.configuracoes,
+    addAtivo: actions.addAtivo,
+    updateAtivo: actions.updateAtivo,
+    removeAtivo: actions.removeAtivo,
+    addOperacao: actions.addOperacao,
+    updateOperacao: actions.updateOperacao,
+    removeOperacao: actions.removeOperacao,
+    addProvento: actions.addProvento,
+    updateProvento: actions.updateProvento,
+    removeProvento: actions.removeProvento,
+    addAporte: actions.addAporte,
+    updateAporte: actions.updateAporte,
+    removeAporte: actions.removeAporte,
+    updateConfiguracoes: actions.updateConfiguracoes,
+    getResumoCarteira: computed.getResumoCarteira,
+    getDistribuicaoTipos: computed.getDistribuicaoTipos
+  };
 };

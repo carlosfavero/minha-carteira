@@ -3,9 +3,9 @@ import { useInvestment } from '../contexts/InvestmentContext';
 import { TrendingUp, TrendingDown, DollarSign, Target } from 'lucide-react';
 
 const Dashboard = () => {
-  const { state, computed } = useInvestment();
-  const resumo = computed.getResumoCarteira();
-  const distribuicao = computed.getDistribuicaoTipos();
+  const { ativos, getResumoCarteira, getDistribuicaoTipos } = useInvestment();
+  const resumo = getResumoCarteira();
+  const distribuicao = getDistribuicaoTipos();
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -25,7 +25,7 @@ const Dashboard = () => {
   ];
 
   // Dados para gráfico de ativos individuais (top 10)
-  const ativosData = state.ativos
+  const ativosData = ativos
     .sort((a, b) => b.valorAtual - a.valorAtual)
     .slice(0, 10)
     .map(ativo => ({
@@ -36,11 +36,11 @@ const Dashboard = () => {
     }));
 
   // Melhores e piores performers
-  const melhoresPerformers = [...state.ativos]
+  const melhoresPerformers = [...ativos]
     .sort((a, b) => b.rentabilidade - a.rentabilidade)
     .slice(0, 5);
 
-  const pioresPerformers = [...state.ativos]
+  const pioresPerformers = [...ativos]
     .sort((a, b) => a.rentabilidade - b.rentabilidade)
     .slice(0, 5);
 
