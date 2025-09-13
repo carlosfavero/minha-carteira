@@ -206,6 +206,31 @@ const AportesComponent = () => {
     }, 0);
   }, [aportes]);
   
+  // Cálculo dos totais por origem
+  const totaisPorOrigem = useMemo(() => {
+    const origens = ['CARLOS', 'GABRIELA'];
+    const result = origens.map(origem => {
+      const entradas = aportes.filter(a => a.origem === origem && a.tipo === 'APORTE').reduce((acc, a) => acc + a.valor, 0);
+      const retiradas = aportes.filter(a => a.origem === origem && a.tipo === 'RETIRADA').reduce((acc, a) => acc + a.valor, 0);
+      return {
+        nome: origem,
+        entradas,
+        retiradas,
+        saldo: entradas - retiradas
+      };
+    });
+    // Outros
+    const entradasOutros = aportes.filter(a => !origens.includes(a.origem) && a.tipo === 'APORTE').reduce((acc, a) => acc + a.valor, 0);
+    const retiradasOutros = aportes.filter(a => !origens.includes(a.origem) && a.tipo === 'RETIRADA').reduce((acc, a) => acc + a.valor, 0);
+    result.push({
+      nome: 'OUTROS',
+      entradas: entradasOutros,
+      retiradas: retiradasOutros,
+      saldo: entradasOutros - retiradasOutros
+    });
+    return result;
+  }, [aportes]);
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
@@ -230,6 +255,30 @@ const AportesComponent = () => {
             Novo Registro
           </button>
         </div>
+      </div>
+      
+      {/* Cards de totais por origem */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {totaisPorOrigem.map(card => (
+          <div key={card.nome} className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">{card.nome}</h3>
+              <p className={`text-xl font-bold ${card.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency(card.saldo)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Entradas</span>
+                <span className="text-sm text-gray-900">{formatCurrency(card.entradas)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Retiradas</span>
+                <span className="text-sm text-gray-900">{formatCurrency(card.retiradas)}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
       
       {/* Lista de Aportes */}
