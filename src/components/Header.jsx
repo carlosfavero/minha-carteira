@@ -2,8 +2,8 @@ import { TrendingUp, DollarSign, Percent, PieChart } from 'lucide-react';
 import { useInvestment } from '../contexts/InvestmentContext';
 
 const Header = () => {
-  const { computed } = useInvestment();
-  const resumo = computed.getResumoCarteira();
+  const { getResumoCarteira } = useInvestment();
+  const resumo = getResumoCarteira();
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', {

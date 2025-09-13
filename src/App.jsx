@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import AtivosTable from './components/AtivosTable';
 import OperacoesForm from './components/OperacoesForm';
 import ProventosComponent from './components/ProventosComponent';
+import AportesComponent from './components/AportesComponent';
 import AnalisesComponent from './components/AnalisesComponent';
 import ConfiguracoesComponent from './components/ConfiguracoesComponent';
 
@@ -22,6 +23,8 @@ function App() {
         return <OperacoesForm />;
       case 'proventos':
         return <ProventosComponent />;
+      case 'aportes':
+        return <AportesComponent />;
       case 'analises':
         return <AnalisesComponent />;
       case 'configuracoes':

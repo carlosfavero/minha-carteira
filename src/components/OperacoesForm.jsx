@@ -4,7 +4,7 @@ import { Plus, Calendar, DollarSign, Hash, Tag, Edit, Trash2 } from 'lucide-reac
 import { format } from 'date-fns';
 
 const OperacoesForm = () => {
-  const { state, actions } = useInvestment();
+  const { ativos, addOperacao, updateOperacao, removeOperacao } = useInvestment();
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingInfo, setEditingInfo] = useState(null);
@@ -38,19 +38,19 @@ const OperacoesForm = () => {
 
     if (isEditing && editingInfo) {
       // Modo de edição
-      actions.updateOperacao(editingInfo.codigoAtivo, editingInfo.operacaoIndex, operacao);
+      updateOperacao(editingInfo.codigoAtivo, editingInfo.operacaoIndex, operacao);
       alert('Operação atualizada com sucesso!');
     } else {
       // Modo de adição
       // Verificar se o ativo existe
-      const ativoExiste = state.ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
+      const ativoExiste = ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
       
       if (!ativoExiste) {
         alert('Ativo não encontrado na carteira. Adicione o ativo primeiro.');
         return;
       }
 
-      actions.addOperacao(formData.codigo.toUpperCase(), operacao);
+      addOperacao(formData.codigo.toUpperCase(), operacao);
       alert('Operação registrada com sucesso!');
     }
     
@@ -75,10 +75,10 @@ const OperacoesForm = () => {
 
   // Atualizar o componente quando o estado global mudar
   useEffect(() => {
-    // Este efeito vai disparar sempre que state.ativos mudar
+    // Este efeito vai disparar sempre que ativos mudar
     // forçando a atualização da lista de operações
     setLastUpdate(Date.now());
-  }, [state.ativos]);
+  }, [ativos]);
 
   const handleChange = (e) => {
     setFormData({
@@ -131,7 +131,7 @@ const OperacoesForm = () => {
 
   const handleRemoveOperacao = (operacao) => {
     if (window.confirm(`Tem certeza que deseja remover esta operação de ${operacao.codigo}? Esta ação afetará todos os cálculos do ativo.`)) {
-      actions.removeOperacao(operacao.codigo, operacao.originalIndex);
+      removeOperacao(operacao.codigo, operacao.originalIndex);
       
       // Forçar uma atualização do componente após a remoção da operação
       setTimeout(() => {
@@ -182,7 +182,7 @@ const OperacoesForm = () => {
   // Agrupar operações por data
   const operacoesAgrupadas = useMemo(() => {
     // Obter todas as operações de todos os ativos
-    const todasOperacoes = state.ativos.flatMap(ativo => 
+    const todasOperacoes = ativos.flatMap(ativo => 
       ativo.operacoes.map((op, index) => ({
         ...op,
         codigo: ativo.codigo,
@@ -219,7 +219,7 @@ const OperacoesForm = () => {
       data,
       operacoes: grupos[data]
     })).slice(0, 5); // Limitar a 5 grupos para não sobrecarregar a interface
-  }, [state.ativos, lastUpdate]); // Adicionar lastUpdate como dependência
+  }, [ativos, lastUpdate]); // Adicionar lastUpdate como dependência
 
   return (
     <div className="space-y-6">

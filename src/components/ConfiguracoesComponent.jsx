@@ -3,12 +3,12 @@ import { useInvestment } from '../contexts/InvestmentContext';
 import { Settings, Save, Download, Upload, RefreshCw, Trash2 } from 'lucide-react';
 
 const ConfiguracoesComponent = () => {
-  const { state, actions } = useInvestment();
-  const [configuracoes, setConfiguracoes] = useState(state.configuracoes);
+  const { ativos, configuracoes: configuracoesGlobais, updateConfiguracoes } = useInvestment();
+  const [configuracoes, setConfiguracoes] = useState(configuracoesGlobais);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleSave = () => {
-    actions.updateConfiguracoes(configuracoes);
+    updateConfiguracoes(configuracoes);
     alert('Configurações salvas com sucesso!');
   };
 
@@ -22,8 +22,8 @@ const ConfiguracoesComponent = () => {
 
   const handleExportData = () => {
     const dataToExport = {
-      ativos: state.ativos,
-      configuracoes: state.configuracoes,
+      ativos: ativos,
+      configuracoes: configuracoesGlobais,
       exportDate: new Date().toISOString()
     };
     
@@ -184,20 +184,20 @@ const ConfiguracoesComponent = () => {
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-primary-600">{state.ativos.length}</div>
+            <div className="text-2xl font-bold text-primary-600">{ativos.length}</div>
             <div className="text-sm text-gray-500">Ativos</div>
           </div>
           
           <div className="text-center">
             <div className="text-2xl font-bold text-success-600">
-              {state.ativos.reduce((sum, ativo) => sum + ativo.operacoes.length, 0)}
+              {ativos.reduce((sum, ativo) => sum + ativo.operacoes.length, 0)}
             </div>
             <div className="text-sm text-gray-500">Operações</div>
           </div>
           
           <div className="text-center">
             <div className="text-2xl font-bold text-warning-600">
-              {state.ativos.reduce((sum, ativo) => sum + ativo.proventos.length, 0)}
+              {ativos.reduce((sum, ativo) => sum + ativo.proventos.length, 0)}
             </div>
             <div className="text-sm text-gray-500">Proventos</div>
           </div>

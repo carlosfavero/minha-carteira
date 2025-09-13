@@ -3,9 +3,9 @@ import { BarChart3, PieChart, TrendingUp, Target, Calculator, DollarSign } from 
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 const AnalisesComponent = () => {
-  const { state, computed } = useInvestment();
-  const resumo = computed.getResumoCarteira();
-  const distribuicao = computed.getDistribuicaoTipos();
+  const { ativos, getResumoCarteira, getDistribuicaoTipos } = useInvestment();
+  const resumo = getResumoCarteira();
+  const distribuicao = getDistribuicaoTipos();
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -19,7 +19,7 @@ const AnalisesComponent = () => {
   };
 
   // Análise de concentração
-  const concentracaoAtivos = state.ativos
+  const concentracaoAtivos = ativos
     .map(ativo => ({
       codigo: ativo.codigo,
       percentual: resumo.valorAtualCarteira > 0 ? (ativo.valorAtual / resumo.valorAtualCarteira) * 100 : 0,
@@ -32,7 +32,7 @@ const AnalisesComponent = () => {
   const concentracaoData = concentracaoAtivos.slice(0, 10);
 
   // Análise de performance por setor (simplificada)
-  const performanceData = state.ativos.map(ativo => ({
+  const performanceData = ativos.map(ativo => ({
     codigo: ativo.codigo,
     rentabilidade: ativo.rentabilidade,
     valor: ativo.valorAtual,
@@ -40,7 +40,7 @@ const AnalisesComponent = () => {
   })).sort((a, b) => b.rentabilidade - a.rentabilidade);
 
   // Sugestões de rebalanceamento
-  const sugestoesRebalanceamento = state.ativos
+  const sugestoesRebalanceamento = ativos
     .filter(ativo => {
       const percentualAtual = resumo.valorAtualCarteira > 0 ? (ativo.valorAtual / resumo.valorAtualCarteira) * 100 : 0;
       return percentualAtual > 10 || percentualAtual < 1; // Muito concentrado ou muito diluído
@@ -71,7 +71,7 @@ const AnalisesComponent = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Diversificação</p>
-              <p className="text-2xl font-bold text-gray-900">{state.ativos.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{ativos.length}</p>
               <p className="text-sm text-gray-500">Ativos diferentes</p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-primary-100 rounded-lg">

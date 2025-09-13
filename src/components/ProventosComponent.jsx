@@ -4,7 +4,7 @@ import { DollarSign, Plus, Calendar, TrendingUp, Building, Edit, Trash2 } from '
 import { format } from 'date-fns';
 
 const ProventosComponent = () => {
-  const { state, actions } = useInvestment();
+  const { ativos, addProvento, updateProvento, removeProvento } = useInvestment();
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingInfo, setEditingInfo] = useState(null);
@@ -29,7 +29,7 @@ const ProventosComponent = () => {
   };
 
   // Obter todos os proventos de todos os ativos
-  const todosProventos = state.ativos
+  const todosProventos = ativos
     .flatMap(ativo => 
       ativo.proventos.map(provento => ({
         ...provento,
@@ -120,18 +120,18 @@ const ProventosComponent = () => {
 
     if (isEditing && editingInfo) {
       // Modo de edição
-      actions.updateProvento(editingInfo.codigoAtivo, editingInfo.proventoIndex, provento);
+      updateProvento(editingInfo.codigoAtivo, editingInfo.proventoIndex, provento);
       alert('Provento atualizado com sucesso!');
     } else {
       // Modo de adição
-      const ativoExiste = state.ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
+      const ativoExiste = ativos.find(ativo => ativo.codigo === formData.codigo.toUpperCase());
       
       if (!ativoExiste) {
         alert('Ativo não encontrado na carteira.');
         return;
       }
 
-      actions.addProvento(formData.codigo.toUpperCase(), provento);
+      addProvento(formData.codigo.toUpperCase(), provento);
       alert('Provento registrado com sucesso!');
     }
     
@@ -184,7 +184,7 @@ const ProventosComponent = () => {
     });
     
     // Encontrar o ativo e o índice do provento para edição
-    const ativo = state.ativos.find(a => a.codigo === provento.codigo);
+    const ativo = ativos.find(a => a.codigo === provento.codigo);
     if (ativo) {
       // Procurar o provento no array de proventos do ativo que corresponde ao provento a ser editado
       const proventoIndex = ativo.proventos.findIndex(p => 
@@ -208,7 +208,7 @@ const ProventosComponent = () => {
   const handleRemoveProvento = (provento) => {
     if (window.confirm(`Tem certeza que deseja remover este provento de ${provento.codigo}? Esta ação afetará todos os cálculos do ativo.`)) {
       // Encontrar o ativo e o índice do provento para remoção
-      const ativo = state.ativos.find(a => a.codigo === provento.codigo);
+      const ativo = ativos.find(a => a.codigo === provento.codigo);
       if (ativo) {
         // Procurar o provento no array de proventos do ativo que corresponde ao provento a ser removido
         const proventoIndex = ativo.proventos.findIndex(p => 
@@ -218,7 +218,7 @@ const ProventosComponent = () => {
         );
         
         if (proventoIndex !== -1) {
-          actions.removeProvento(provento.codigo, proventoIndex);
+          removeProvento(provento.codigo, proventoIndex);
           
           // Forçar uma atualização do componente após a remoção do provento
           setTimeout(() => {

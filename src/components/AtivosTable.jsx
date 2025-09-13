@@ -5,7 +5,7 @@ import AddAtivoModal from './AddAtivoModal';
 import DetalheAtivo from './DetalheAtivo';
 
 const AtivosTable = () => {
-  const { state, actions } = useInvestment();
+  const { ativos, addAtivo, updateAtivo, removeAtivo } = useInvestment();
   const [sortField, setSortField] = useState('valorAtual');
   const [sortDirection, setSortDirection] = useState('desc');
   const [filter, setFilter] = useState('TODOS');
@@ -29,7 +29,7 @@ const AtivosTable = () => {
   };
 
   // Filtrar ativos
-  const filteredAtivos = state.ativos.filter(ativo => {
+  const filteredAtivos = ativos.filter(ativo => {
     if (filter === 'TODOS') return true;
     return ativo.tipo === filter;
   });
@@ -71,7 +71,7 @@ const AtivosTable = () => {
 
   const handleRemoveAtivo = (codigo) => {
     if (window.confirm(`Tem certeza que deseja remover o ativo ${codigo}?`)) {
-      actions.removeAtivo(codigo);
+      removeAtivo(codigo);
     }
   };
 

@@ -7,7 +7,8 @@ import {
   BarChart3, 
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Wallet
 } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab }) => {
@@ -37,6 +38,12 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       label: 'Proventos',
       icon: DollarSign,
       description: 'Dividendos e rendimentos'
+    },
+    {
+      id: 'aportes',
+      label: 'Aportes',
+      icon: Wallet,
+      description: 'Aportes e retiradas'
     },
     {
       id: 'analises',

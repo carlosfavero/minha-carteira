@@ -1,11 +1,12 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
 import { X, TrendingUp, TrendingDown, DollarSign, Plus, Calendar, Edit, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Dialog, Transition } from '@headlessui/react';
 
 const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
-  const { actions, state } = useInvestment();
+  const { ativos, addOperacao, updateOperacao, removeOperacao, addProvento, updateProvento, removeProvento, updateAtivo } = useInvestment();
   const [ativoLocal, setAtivoLocal] = useState(ativoProp);
   const [activeTab, setActiveTab] = useState('resumo');
   const [lastUpdate, setLastUpdate] = useState(Date.now()); // Estado para controlar atualizações
@@ -47,14 +48,14 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
 
   // Atualizar o ativo local quando mudar de aba ou quando o estado global for atualizado
   useEffect(() => {
-    if (ativoLocal && state.ativos) {
+    if (ativoLocal && ativos) {
       // Buscar dados atualizados do ativo
-      const ativoAtualizado = state.ativos.find(a => a.codigo === ativoLocal.codigo);
+      const ativoAtualizado = ativos.find(a => a.codigo === ativoLocal.codigo);
       if (ativoAtualizado && JSON.stringify(ativoAtualizado) !== JSON.stringify(ativoLocal)) {
         setAtivoLocal(ativoAtualizado);
       }
     }
-  }, [activeTab, state.ativos, ativoLocal?.codigo]);
+  }, [activeTab, ativos, ativoLocal?.codigo]);
 
   // Função para lidar com o fechamento do modal
   const handleClose = () => {
@@ -268,7 +269,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     if (editingOperacaoIndex !== null) {
       // Modo de edição
       // 1. Atualizar o estado global primeiro
-      actions.updateOperacao(ativoLocal.codigo, editingOperacaoIndex, novaOperacao);
+      updateOperacao(ativoLocal.codigo, editingOperacaoIndex, novaOperacao);
       
       // 2. Criar uma cópia profunda do ativo para atualização local
       novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
@@ -302,7 +303,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     } else {
       // Modo de adição
       // 1. Atualizar o estado global primeiro
-      actions.addOperacao(ativoLocal.codigo, novaOperacao);
+      addOperacao(ativoLocal.codigo, novaOperacao);
       
       // 2. Criar uma cópia profunda do ativo para atualização local
       novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
@@ -403,12 +404,12 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       setLastUpdate(Date.now());
       
       // Chamar a ação para atualizar o estado global
-      actions.removeOperacao(codigoAtivo, operacaoIndex);
+      removeOperacao(codigoAtivo, operacaoIndex);
       
       // Atualizar o estado local novamente após um breve atraso para sincronizar com o estado global
       setTimeout(() => {
         if (isMounted.current) {
-          const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
+          const ativoAtualizado = ativos.find(a => a.codigo === codigoAtivo);
           if (ativoAtualizado) {
             setAtivoLocal(ativoAtualizado);
             setLastUpdate(Date.now()); // Forçar nova atualização
@@ -485,7 +486,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     if (editingProventoIndex !== null) {
       // Modo de edição
       // 1. Atualizar o estado global primeiro
-      actions.updateProvento(ativoLocal.codigo, editingProventoIndex, novoProvento);
+      updateProvento(ativoLocal.codigo, editingProventoIndex, novoProvento);
       
       // 2. Criar uma cópia profunda do ativo para atualização local
       novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
@@ -498,7 +499,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
     } else {
       // Modo de adição
       // 1. Atualizar o estado global primeiro
-      actions.addProvento(ativoLocal.codigo, novoProvento);
+      addProvento(ativoLocal.codigo, novoProvento);
       
       // 2. Criar uma cópia profunda do ativo para atualização local
       novoAtivoLocal = JSON.parse(JSON.stringify(ativoLocal));
@@ -577,12 +578,12 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       setLastUpdate(Date.now());
       
       // Chamar a ação para atualizar o estado global
-      actions.removeProvento(codigoAtivo, proventoIndex);
+      removeProvento(codigoAtivo, proventoIndex);
       
       // Atualizar o estado local novamente após um breve atraso para sincronizar com o estado global
       setTimeout(() => {
         if (isMounted.current) {
-          const ativoAtualizado = state.ativos.find(a => a.codigo === codigoAtivo);
+          const ativoAtualizado = ativos.find(a => a.codigo === codigoAtivo);
           if (ativoAtualizado) {
             setAtivoLocal(ativoAtualizado);
             setLastUpdate(Date.now()); // Forçar nova atualização
@@ -625,7 +626,7 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       rentabilidade: rentabilidade
     };
 
-    actions.updateAtivo(ativoAtualizado);
+    updateAtivo(ativoAtualizado);
     setAtivoLocal(ativoAtualizado);
     alert('Cotação atualizada com sucesso!');
     handleClose(); // Fecha o modal após atualizar a cotação
@@ -634,32 +635,56 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   if (!isOpen || !ativoLocal) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 space-y-0" style={{ marginTop: 0, marginBottom: 0 }}>
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-              <span className="mr-2">{ativoLocal.codigo}</span>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                ativoLocal.tipo === 'ACAO' 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-green-100 text-green-800'
-              }`}>
-                {ativoLocal.tipo}
-              </span>
-            </h3>
-            <p className="text-sm text-gray-500">
-              {ativoLocal.quantidade} {ativoLocal.quantidade > 1 ? 'unidades' : 'unidade'}
-            </p>
-          </div>
-          <button 
-            onClick={handleClose}
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Transition appear show={isOpen} as={Fragment}>
+      <Dialog as="div" className="relative z-50" onClose={handleClose}>
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black bg-opacity-25" />
+        </Transition.Child>
+
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-lg bg-white p-6 text-left align-middle shadow-xl transition-all max-h-[90vh] overflow-y-auto">
+                {/* Cabeçalho */}
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                      <span className="mr-2">{ativoLocal?.codigo}</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        ativoLocal?.tipo === 'ACAO' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {ativoLocal?.tipo}
+                      </span>
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {ativoLocal?.quantidade} {ativoLocal?.quantidade > 1 ? 'unidades' : 'unidade'}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={handleClose}
+                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-full hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
 
         {/* Resumo do Ativo */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1229,8 +1254,12 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </div>
+      </Dialog>
+    </Transition>
   );
 };
 
