@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useInvestment } from '../contexts/InvestmentContext';
 import { Settings, Save, Download, Upload, RefreshCw, Trash2 } from 'lucide-react';
+import ConfiguracaoAlocacao from './ConfiguracaoAlocacao';
 
 const ConfiguracoesComponent = () => {
-  const { ativos, configuracoes: configuracoesGlobais, updateConfiguracoes } = useInvestment();
+  const { ativos, configuracoes: configuracoesGlobais, updateConfiguracoes, recalcularRentabilidades } = useInvestment();
   const [configuracoes, setConfiguracoes] = useState(configuracoesGlobais);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const handleSave = () => {
     updateConfiguracoes(configuracoes);
@@ -129,14 +131,36 @@ const ConfiguracoesComponent = () => {
             </div>
           </div>
 
-          <div className="pt-4">
+          <div className="pt-4 flex space-x-4">
             <button onClick={handleSave} className="btn-primary flex items-center space-x-2">
               <Save className="h-4 w-4" />
               <span>Salvar Configurações</span>
             </button>
+            
+            <button 
+              onClick={async () => {
+                setIsRecalculating(true);
+                try {
+                  await recalcularRentabilidades();
+                } catch (error) {
+                  console.error('Erro ao recalcular rentabilidades:', error);
+                  alert('Erro ao recalcular rentabilidades. Tente novamente.');
+                } finally {
+                  setIsRecalculating(false);
+                }
+              }} 
+              disabled={isRecalculating}
+              className={`btn-secondary flex items-center space-x-2 ${isRecalculating ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <RefreshCw className={`h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
+              <span>{isRecalculating ? 'Recalculando...' : 'Recalcular Rentabilidades'}</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Configuração de Alocação Ideal */}
+      <ConfiguracaoAlocacao />
 
       {/* Backup e Restauração */}
       <div className="card">
@@ -190,14 +214,14 @@ const ConfiguracoesComponent = () => {
           
           <div className="text-center">
             <div className="text-2xl font-bold text-success-600">
-              {ativos.reduce((sum, ativo) => sum + ativo.operacoes.length, 0)}
+              {ativos.reduce((sum, ativo) => sum + ((ativo.operacoes && ativo.operacoes.length) ? ativo.operacoes.length : 0), 0)}
             </div>
             <div className="text-sm text-gray-500">Operações</div>
           </div>
           
           <div className="text-center">
             <div className="text-2xl font-bold text-warning-600">
-              {ativos.reduce((sum, ativo) => sum + ativo.proventos.length, 0)}
+              {ativos.reduce((sum, ativo) => sum + ((ativo.proventos && ativo.proventos.length) ? ativo.proventos.length : 0), 0)}
             </div>
             <div className="text-sm text-gray-500">Proventos</div>
           </div>
@@ -243,6 +267,26 @@ const ConfiguracoesComponent = () => {
           </div>
         </div>
       </div>
+
+      {/* Overlay de Loading para Recálculo */}
+      {isRecalculating && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-sm mx-4 text-center">
+            <div className="flex justify-center mb-4">
+              <RefreshCw className="h-12 w-12 text-blue-600 animate-spin" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Recalculando Rentabilidades
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Aguarde enquanto recalculamos as rentabilidades de todos os ativos...
+            </p>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{width: '100%'}}></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Informações da Aplicação */}
       <div className="card bg-gray-50">

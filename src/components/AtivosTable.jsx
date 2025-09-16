@@ -5,7 +5,7 @@ import AddAtivoModal from './AddAtivoModal';
 import DetalheAtivo from './DetalheAtivo';
 
 const AtivosTable = () => {
-  const { ativos, addAtivo, updateAtivo, removeAtivo } = useInvestment();
+  const { ativos, addAtivo, updateAtivo, removeAtivo, configuracoes } = useInvestment();
   const [sortField, setSortField] = useState('valorAtual');
   const [sortDirection, setSortDirection] = useState('desc');
   const [filter, setFilter] = useState('TODOS');
@@ -21,11 +21,50 @@ const AtivosTable = () => {
   };
 
   const formatPercentage = (value) => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '0.00%';
+    }
     return `${value.toFixed(2)}%`;
   };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  // Função para calcular o percentual ideal dinamicamente
+  const calcularPercentualIdeal = (ativo) => {
+    if (!configuracoes?.alocacaoIdeal) return 0;
+    
+    const classe = ativo.tipo === 'ACAO' ? 'acoes' : 'fiis';
+    const configClasse = configuracoes.alocacaoIdeal[classe];
+    
+    if (!configClasse) return 0;
+    
+    // Se tem configuração específica para o ativo
+    if (configClasse.porAtivo && configClasse.porAtivo[ativo.codigo]) {
+      return configClasse.porAtivo[ativo.codigo];
+    }
+    
+    // Se não tem configuração específica, calcula distribuição igualitária
+    const ativosClasse = ativos.filter(a => a.tipo === ativo.tipo);
+    const ativosComPercentualFixo = ativosClasse.filter(a => 
+      configClasse.porAtivo && configClasse.porAtivo[a.codigo] && configClasse.porAtivo[a.codigo] > 0
+    );
+    const ativosComPercentualZero = ativosClasse.filter(a => 
+      !configClasse.porAtivo || !configClasse.porAtivo[a.codigo] || configClasse.porAtivo[a.codigo] === 0
+    );
+    
+    if (ativosComPercentualZero.length === 0) return 0;
+    
+    // Percentual total já alocado para ativos com % fixo
+    const percentualTotalFixo = ativosComPercentualFixo.reduce((sum, a) => 
+      sum + (configClasse.porAtivo[a.codigo] || 0), 0
+    );
+    
+    // Percentual restante para distribuição
+    const percentualRestante = 100 - percentualTotalFixo;
+    
+    return percentualRestante / ativosComPercentualZero.length;
   };
 
   // Filtrar ativos
@@ -198,6 +237,7 @@ const AtivosTable = () => {
                     {getSortIcon('dividendYield')}
                   </div>
                 </th>
+                <th className="table-header">% Ideal</th>
                 <th className="table-header">Ações</th>
               </tr>
             </thead>
@@ -243,6 +283,7 @@ const AtivosTable = () => {
                     </div>
                   </td>
                   <td className="table-cell text-gray-900">{formatPercentage(ativo.dividendYield)}</td>
+                  <td className="table-cell text-gray-900">{formatPercentage(calcularPercentualIdeal(ativo))}</td>
                   <td className="table-cell">
                     <div className="flex items-center space-x-2">
                       <button 

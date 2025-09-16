@@ -5,6 +5,7 @@ import { ArrowDownToLine, ArrowUpFromLine, Calendar, Edit, MoreHorizontal, Plus,
 import { useInvestment } from '../contexts/InvestmentContext';
 import { formatCurrency } from '../utils/formatters';
 import { Dialog, Transition } from '@headlessui/react';
+import SugestaoRebalanceamento from './SugestaoRebalanceamento';
 
 // Constante para as opções de origem
 const ORIGENS = ['CARLOS', 'GABRIELA'];
@@ -65,7 +66,7 @@ const AporteModal = ({ isOpen, onClose, title, children }) => {
 };
 
 const AportesComponent = () => {
-  const { aportes = [], addAporte, updateAporte, removeAporte } = useInvestment() || {};
+  const { aportes = [], addAporte, updateAporte, removeAporte, gerarSugestaoDeAporte } = useInvestment() || {};
   
   // Estado para o modal
   const [isOpen, setIsOpen] = useState(false);
@@ -80,6 +81,10 @@ const AportesComponent = () => {
   
   // Estado para modo de edição
   const [editingId, setEditingId] = useState(null);
+  
+  // Estados para sugestão de rebalanceamento
+  const [valorAporte, setValorAporte] = useState('');
+  const [sugestoes, setSugestoes] = useState([]);
   
   // Referência para o input de valor para foco automático
   const valorInputRef = useRef(null);
@@ -111,6 +116,20 @@ const AportesComponent = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+  
+  // Função para lidar com mudança no valor do aporte para sugestão
+  const handleValorAporteChange = (e) => {
+    const valor = e.target.value;
+    setValorAporte(valor);
+    
+    // Gera sugestões automaticamente quando há um valor válido
+    if (valor && parseFloat(valor) > 0 && gerarSugestaoDeAporte) {
+      const sugestoesGeradas = gerarSugestaoDeAporte(parseFloat(valor));
+      setSugestoes(sugestoesGeradas);
+    } else {
+      setSugestoes([]);
+    }
   };
   
   // Função para lidar com o envio do formulário
@@ -279,6 +298,43 @@ const AportesComponent = () => {
             </div>
           </div>
         ))}
+      </div>
+      
+      {/* Seção de Sugestão de Rebalanceamento */}
+      <div className="mb-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Sugestão de Rebalanceamento</h2>
+              <p className="text-sm text-gray-600">
+                Digite o valor do aporte para receber sugestões automáticas de distribuição
+              </p>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label htmlFor="valorAporte" className="block text-sm font-medium text-gray-700 mb-2">
+              Valor do Aporte (R$)
+            </label>
+            <input
+              type="number"
+              id="valorAporte"
+              value={valorAporte}
+              onChange={handleValorAporteChange}
+              min="0.01"
+              step="0.01"
+              placeholder="Digite o valor do aporte..."
+              className="input-field w-full max-w-xs"
+            />
+          </div>
+          
+          {valorAporte && parseFloat(valorAporte) > 0 && (
+            <SugestaoRebalanceamento 
+              valorAporte={parseFloat(valorAporte)} 
+              sugestoes={sugestoes} 
+            />
+          )}
+        </div>
       </div>
       
       {/* Lista de Aportes */}
