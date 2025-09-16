@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, Transition } from '@headlessui/react';
 
 const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
-  const { ativos, addOperacao, updateOperacao, removeOperacao, addProvento, updateProvento, removeProvento, updateAtivo } = useInvestment();
+  const { ativos, addOperacao, updateOperacao, removeOperacao, addProvento, updateProvento, removeProvento, updateAtivo, updateConfiguracoes, configuracoes } = useInvestment();
   const [ativoLocal, setAtivoLocal] = useState(ativoProp);
   const [activeTab, setActiveTab] = useState('resumo');
   const [lastUpdate, setLastUpdate] = useState(Date.now()); // Estado para controlar atualizações
@@ -22,6 +22,8 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   const [formCotacao, setFormCotacao] = useState({
     valor: ativoProp ? ativoProp.cotacaoAtual.toString() : ''
   });
+  // Estado para controlar o % ideal
+  const [percentualIdeal, setPercentualIdeal] = useState('');
   // Estados para gerenciar proventos
   const [showAddProvento, setShowAddProvento] = useState(false);
   const [editingProventoIndex, setEditingProventoIndex] = useState(null);
@@ -83,8 +85,13 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       setFormCotacao({
         valor: ativoLocal.cotacaoAtual.toString()
       });
+      
+      // Buscar o percentual ideal atual do ativo
+      const classe = ativoLocal.tipo === 'ACAO' ? 'acoes' : 'fiis';
+      const percentualAtual = configuracoes?.alocacaoIdeal?.[classe]?.porAtivo?.[ativoLocal.codigo] || 0;
+      setPercentualIdeal(percentualAtual.toString());
     }
-  }, [ativoLocal]);
+  }, [ativoLocal, configuracoes]);
 
   // Agrupar operações por data
   const operacoesAgrupadas = useMemo(() => {
@@ -175,6 +182,9 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
   };
 
   const formatPercentage = (value) => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '0.00%';
+    }
     return `${value.toFixed(2)}%`;
   };
 
@@ -220,6 +230,34 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
       ...formCotacao,
       [e.target.name]: e.target.value
     });
+  };
+
+  // Função para lidar com mudança do percentual ideal
+  const handlePercentualIdealChange = (e) => {
+    const valor = e.target.value;
+    setPercentualIdeal(valor);
+    
+    // Salvar automaticamente quando o valor mudar
+    if (ativoLocal && valor !== '') {
+      const classe = ativoLocal.tipo === 'ACAO' ? 'acoes' : 'fiis';
+      const novoValor = parseFloat(valor) || 0;
+      
+      const novaConfiguracao = {
+        ...configuracoes,
+        alocacaoIdeal: {
+          ...configuracoes.alocacaoIdeal,
+          [classe]: {
+            ...configuracoes.alocacaoIdeal[classe],
+            porAtivo: {
+              ...configuracoes.alocacaoIdeal[classe].porAtivo,
+              [ativoLocal.codigo]: novoValor
+            }
+          }
+        }
+      };
+      
+      updateConfiguracoes(novaConfiguracao);
+    }
   };
 
   const handleAddOperacao = (e) => {
@@ -628,8 +666,9 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
 
     updateAtivo(ativoAtualizado);
     setAtivoLocal(ativoAtualizado);
-    alert('Cotação atualizada com sucesso!');
-    handleClose(); // Fecha o modal após atualizar a cotação
+    // Removido o alert e handleClose para manter o modal aberto
+    // alert('Cotação atualizada com sucesso!');
+    // handleClose(); // Mantém o modal aberto após atualizar a cotação
   };
 
   if (!isOpen || !ativoLocal) return null;
@@ -693,8 +732,18 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
             <p className="text-lg font-semibold">{formatCurrency(ativoLocal.precoMedio)}</p>
           </div>
           <div className="card p-4">
-            <p className="text-sm text-gray-500 mb-1">Cotação Atual</p>
-            <p className="text-lg font-semibold">{formatCurrency(ativoLocal.cotacaoAtual)}</p>
+            <p className="text-sm text-gray-500 mb-2">Cotação Atual</p>
+            <input
+              type="number"
+              name="valor"
+              value={formCotacao.valor}
+              onChange={handleCotacaoChange}
+              onBlur={handleUpdateCotacao}
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Valor Investido</p>
@@ -706,8 +755,8 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
           </div>
         </div>
 
-        {/* Rentabilidade e Dividend Yield */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Rentabilidade, Dividend Yield e % Ideal */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Rentabilidade</p>
             <div className="flex items-center">
@@ -726,6 +775,25 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
           <div className="card p-4">
             <p className="text-sm text-gray-500 mb-1">Dividend Yield</p>
             <p className="text-lg font-semibold">{formatPercentage(ativoLocal.dividendYield)}</p>
+          </div>
+          <div className="card p-4">
+            <p className="text-sm text-gray-500 mb-2">% Ideal</p>
+            <div className="flex items-center space-x-2">
+              <input
+                type="number"
+                value={percentualIdeal}
+                onChange={handlePercentualIdealChange}
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="0.00"
+                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+              />
+              <span className="text-gray-500 text-sm">%</span>
+              <span className="text-xs text-gray-400">
+                {parseFloat(percentualIdeal) === 0 ? '(rateado)' : '(fixo)'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -770,37 +838,6 @@ const DetalheAtivo = ({ isOpen, onClose, ativo: ativoProp }) => {
           {/* Tab Resumo */}
           {activeTab === 'resumo' && (
             <div>
-              <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                <h4 className="text-sm font-medium text-gray-900 mb-4">Atualizar Cotação</h4>
-                <form onSubmit={handleUpdateCotacao} className="flex items-end gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cotação Atual (R$) *
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input
-                        type="number"
-                        name="valor"
-                        value={formCotacao.valor}
-                        onChange={handleCotacaoChange}
-                        className="input-field pl-9"
-                        placeholder="72.30"
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    className="btn-primary h-10"
-                  >
-                    Atualizar
-                  </button>
-                </form>
-              </div>
-
               <h4 className="text-sm font-medium text-gray-900 mb-3">Informações do Ativo</h4>
               <div className="overflow-hidden border border-gray-200 rounded-lg">
                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">

@@ -15,6 +15,9 @@ const AnalisesComponent = () => {
   };
 
   const formatPercentage = (value) => {
+    if (value === undefined || value === null || isNaN(value)) {
+      return '0.00%';
+    }
     return `${value.toFixed(2)}%`;
   };
 
